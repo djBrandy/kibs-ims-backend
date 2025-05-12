@@ -1,21 +1,28 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate  # Import Flask-Migrate
+from flask_migrate import Migrate
+from flask_cors import CORS
+from config import Config  # Import configuration settings
+
+# Route imports
+from .routes.products import product_bp
 
 db = SQLAlchemy()
-migrate = Migrate()  # Initialize Flask-Migrate
+migrate = Migrate()
 
 def create_app():
     app = Flask(__name__)
     
-    # MySQL Database Configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:#Lerengesu.156@localhost/ims_kibs'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Load configurations from config.py
+    app.config.from_object(Config)
 
+    # Initialize extensions
     db.init_app(app)
-    migrate.init_app(app, db)  # Bind Flask-Migrate to the app and database
+    migrate.init_app(app, db)
+    CORS(app)
 
-    from .routes import bp
-    app.register_blueprint(bp)
+
+
+    app.register_blueprint(product_bp)
 
     return app

@@ -1,0 +1,29 @@
+# Ignore configuration files containing sensitive credentials
+config.py
+
+# Ignore database files
+*.sqlite
+*.db
+
+# Ignore compiled Python files
+*.pyc
+__pycache__/
+
+# Ignore virtual environment
+venv/
+env/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore Flask migration files (if using Flask-Migrate)
+migrations/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE/editor settings
+.vscode/
+.idea/
