@@ -6,13 +6,11 @@ from app.models import Product
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
 
-# GET ROUTE
-
 @product_bp.route('/', methods=['GET'])
 def get_all_products():
     """Get all products with optional filtering"""
     try:
-        # Get query parameters for filtering
+
         category = request.args.get('category')
         product_type = request.args.get('product_type')
         low_stock = request.args.get('low_stock', type=bool)
@@ -38,7 +36,7 @@ def get_all_products():
             'manufacturer': product.manufacturer,
             'storage_location': product.storage_location,
             'low_stock_alert': product.low_stock_alert,
-            # Include other fields as needed
+            
         } for product in products]), 200
         
     except Exception as e:
@@ -46,7 +44,6 @@ def get_all_products():
 
 
 
-# GET ROUTE FOR A SINGLE PRODUCT BY ID
 @product_bp.route('/<int:product_id>', methods=['GET'])
 def get_product(product_id):
     try:
@@ -85,14 +82,12 @@ def create_product():
     try:
         data = request.get_json()
         
-        # Validate required fields
         required_fields = ['product_name', 'price_in_kshs', 'product_type', 'category', 
                           'product_code', 'manufacturer', 'storage_location', 'supplier_information']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'error': f'{field} is required'}), 400
         
-        # Handle expiration date conversion
         expiration_date = None
         if 'expiration_date' in data and data['expiration_date']:
             try:
@@ -139,7 +134,6 @@ def update_product(product_id):
         product = Product.query.get_or_404(product_id)
         data = request.get_json()
         
-        # Update fields
         if 'product_name' in data:
             product.product_name = data['product_name']
         if 'price_in_kshs' in data:
