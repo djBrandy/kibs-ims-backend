@@ -1,10 +1,9 @@
-from flask import Blueprint
-
-from .products import product_bp
-
-blueprints = [product_bp]
-
+# ims-kibs-backend/routes/__init__.py
+from routes.products import product_bp
+from routes.audit import audit_bp  # Add this line
 
 def register_blueprints(app):
-    for bp in blueprints:
-        app.register_blueprint(bp)
+    app.register_blueprint(product_bp)
+    app.register_blueprint(audit_bp)  # Add this line
+    # Register other blueprints here as needed
+    # app.register_blueprint(other_bp)
