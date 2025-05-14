@@ -1,131 +1,164 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from app import db
-from app.models import Product
+from app import Product
+import random
 
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
 
 @product_bp.route('/', methods=['GET'])
 def get_all_products():
-    """Get all products with optional filtering"""
     try:
-
         category = request.args.get('category')
         product_type = request.args.get('product_type')
         low_stock = request.args.get('low_stock', type=bool)
-        
+
         query = Product.query
-        
+
         if category:
             query = query.filter(Product.category == category)
         if product_type:
             query = query.filter(Product.product_type == product_type)
         if low_stock is not None:
-            query = query.filter(Product.low_stock_alert == low_stock)
-            
+            if low_stock:  # True means return only low-stock products
+                query = query.filter(Product.quantity <= Product.low_stock_alert)
+            else:  # False means return products above low stock threshold
+                query = query.filter(Product.quantity > Product.low_stock_alert)
+
         products = query.all()
-        
+
         return jsonify([{
-            'id': product.id,
-            'product_name': product.product_name,
-            'product_code': product.product_code,
-            'price_in_kshs': product.price_in_kshs,
-            'category': product.category,
-            'product_type': product.product_type,
-            'manufacturer': product.manufacturer,
-            'storage_location': product.storage_location,
-            'low_stock_alert': product.low_stock_alert,
-            
+            "id": product.id,
+            "product_name": product.product_name,
+            "product_code": product.product_code,
+            "qr_code": product.qr_code,
+            "price_in_kshs": product.price_in_kshs,
+            "quantity": product.quantity,
+            "unit_of_measure": product.unit_of_measure,
+            "category": product.category,
+            "product_type": product.product_type,
+            "manufacturer": product.manufacturer,
+            "low_stock_alert": product.low_stock_alert,
+            "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
         } for product in products]), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 
 @product_bp.route('/<int:product_id>', methods=['GET'])
 def get_product(product_id):
     try:
         product = Product.query.get_or_404(product_id)
-        
+
         return jsonify({
-            'id': product.id,
-            'product_name': product.product_name,
-            'product_code': product.product_code,
-            'price_in_kshs': product.price_in_kshs,
-            'product_type': product.product_type,
-            'storage_temperature': product.storage_temperature,
-            'hazard_level': product.hazard_level,
-            'protocol_link': product.protocol_link,
-            'msds_link': product.msds_link,
-            'low_stock_alert': product.low_stock_alert,
-            'checkbox_expiry_date': product.checkbox_expiry_date,
-            'checkbox_hazardous_material': product.checkbox_hazardous_material,
-            'checkbox_controlled_substance': product.checkbox_controlled_substance,
-            'checkbox_requires_regular_calibration': product.checkbox_requires_regular_calibration,
-            'special_instructions': product.special_instructions,
-            'category': product.category,
-            'manufacturer': product.manufacturer,
-            'expiration_date': product.expiration_date.isoformat() if product.expiration_date else None,
-            'storage_location': product.storage_location,
-            'supplier_information': product.supplier_information,
-            'date_of_entry': product.date_of_entry.isoformat()
+            "id": product.id,
+            "product_name": product.product_name,
+            "product_type": product.product_type,
+            "category": product.category,
+            "product_code": product.product_code,
+            "manufacturer": product.manufacturer,
+            "qr_code": product.qr_code,
+            "price_in_kshs": product.price_in_kshs,
+            "quantity": product.quantity,
+            "unit_of_measure": product.unit_of_measure,
+            "concentration": product.concentration,
+            "storage_temperature": product.storage_temperature,
+            "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
+            "hazard_level": product.hazard_level,
+            "protocol_link": product.protocol_link,
+            "msds_link": product.msds_link,
+            "low_stock_alert": product.low_stock_alert,
+            "checkbox_expiry_date": product.checkbox_expiry_date,
+            "checkbox_hazardous_material": product.checkbox_hazardous_material,
+            "checkbox_controlled_substance": product.checkbox_controlled_substance,
+            "checkbox_requires_regular_calibration": product.checkbox_requires_regular_calibration,
+            "special_instructions": product.special_instructions,
+            "product_images": product.product_images.decode('utf-8') if product.product_images else None,
+            "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+
+def to_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() == 'true'
+    return False
+
 
 @product_bp.route('/', methods=['POST'])
 def create_product():
-    """Create a new product"""
     try:
-        data = request.get_json()
+
+        if request.content_type == 'application/json':
+            data = request.get_json() 
+        else:
+            data = request.form  
+
+        image_file = request.files.get('product_images') 
+        if image_file and not image_file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            return jsonify({'error': 'Invalid image format. Only PNG, JPG, JPEG, and GIF are allowed.'}), 400
         
-        required_fields = ['product_name', 'price_in_kshs', 'product_type', 'category', 
-                          'product_code', 'manufacturer', 'storage_location', 'supplier_information']
+        required_fields = [
+            'product_name', 'price_in_kshs', 'product_type',
+            'category', 'product_code', 'manufacturer',
+            'quantity', 'unit_of_measure'
+        ]
+
         for field in required_fields:
-            if field not in data or not data[field]:
+            if not data.get(field):
                 return jsonify({'error': f'{field} is required'}), 400
-        
+
         expiration_date = None
-        if 'expiration_date' in data and data['expiration_date']:
+        if data.get('expiration_date'):
             try:
                 expiration_date = datetime.strptime(data['expiration_date'], '%Y-%m-%d').date()
             except ValueError:
                 return jsonify({'error': 'Invalid expiration date format. Use YYYY-MM-DD'}), 400
-        
+
+        image_data = image_file.read() if image_file else None
+
+
         product = Product(
             product_name=data['product_name'],
-            price_in_kshs=data['price_in_kshs'],
+            price_in_kshs=float(data['price_in_kshs']),
             product_type=data['product_type'],
-            storage_temperature=data.get('storage_temperature'),
-            hazard_level=data.get('hazard_level'),
-            protocol_link=data.get('protocol_link'),
-            msds_link=data.get('msds_link'),
-            low_stock_alert=data.get('low_stock_alert', False),
-            product_images=data.get('product_images'),
-            checkbox_expiry_date=data.get('checkbox_expiry_date', False),
-            checkbox_hazardous_material=data.get('checkbox_hazardous_material', False),
-            checkbox_controlled_substance=data.get('checkbox_controlled_substance', False),
-            checkbox_requires_regular_calibration=data.get('checkbox_requires_regular_calibration', False),
-            special_instructions=data.get('special_instructions'),
             category=data['category'],
             product_code=data['product_code'],
             manufacturer=data['manufacturer'],
+            qr_code=data['qr_code'],
+            quantity=int(data['quantity']),
+            unit_of_measure=data['unit_of_measure'],
+            concentration=float(data['concentration']) if data.get('concentration') else None,
+            storage_temperature=data.get('storage_temperature'),
             expiration_date=expiration_date,
-            storage_location=data['storage_location'],
-            supplier_information=data['supplier_information']
+            hazard_level=data.get('hazard_level'),
+            protocol_link=data.get('protocol_link'),
+            msds_link=data.get('msds_link'),
+            low_stock_alert=int(data.get('low_stock_alert', 10)),
+            checkbox_expiry_date=to_bool(data.get('checkbox_expiry_date', 'false')),
+            checkbox_hazardous_material=to_bool(data.get('checkbox_hazardous_material', 'false')),
+            checkbox_controlled_substance=to_bool(data.get('checkbox_controlled_substance', 'false')),
+            checkbox_requires_regular_calibration=to_bool(data.get('checkbox_requires_regular_calibration', 'false')),
+            special_instructions=data.get('special_instructions'),
+            product_images=image_data
         )
-        
+
         db.session.add(product)
         db.session.commit()
-        
+
         return jsonify({'message': 'Product created successfully', 'id': product.id}), 201
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+    
+
 
 @product_bp.route('/<int:product_id>', methods=['PUT'])
 def update_product(product_id):
