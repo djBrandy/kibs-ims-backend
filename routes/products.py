@@ -91,6 +91,7 @@ def to_bool(value):
     return False
 
 
+
 @product_bp.route('/', methods=['POST'])
 def create_product():
     try:
@@ -216,17 +217,28 @@ def update_product(product_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
 @product_bp.route('/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
     """Delete a product"""
     try:
-        product = Product.query.get_or_404(product_id)
+        print(f"Attempting to delete product with ID: {product_id}")
         
-        db.session.delete(product)
+        # First, delete related alert notifications
+        db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product_id}")
+        
+        # Then delete any related purchases
+        db.session.execute(f"DELETE FROM purchases WHERE product_id = {product_id}")
+        
+        # Finally delete the product
+        db.session.execute(f"DELETE FROM products WHERE id = {product_id}")
+        
+        # Commit all changes
         db.session.commit()
         
         return jsonify({'message': 'Product deleted successfully'}), 200
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error deleting product: {str(e)}")
         return jsonify({'error': str(e)}), 500

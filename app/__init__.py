@@ -55,6 +55,9 @@ class Product(db.Model):
     special_instructions = db.Column(db.Text, nullable=True)
     product_images = db.Column(db.LargeBinary, nullable=True)
     date_of_entry = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship with purchases
+    purchases = db.relationship('Purchase', backref='product', lazy=True)
 
 
 class Supplier(db.Model):
@@ -70,6 +73,9 @@ class Supplier(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relationship with purchases
+    purchases = db.relationship('Purchase', backref='supplier', lazy=True)
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -81,6 +87,48 @@ class Supplier(db.Model):
             'notes': self.notes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class Purchase(db.Model):
+    __tablename__ = 'purchases'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('suppliers.id'), nullable=False)
+    purchase_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    price_per_unit = db.Column(db.Float, nullable=False)
+    total_price = db.Column(db.Float, nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'supplier_id': self.supplier_id,
+            'purchase_date': self.purchase_date.isoformat() if self.purchase_date else None,
+            'quantity': self.quantity,
+            'price_per_unit': self.price_per_unit,
+            'total_price': self.total_price
+        }
+
+
+class AlertNotification(db.Model):
+    __tablename__ = 'alert_notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    alert_type = db.Column(db.String(50), nullable=False)  # 'low_stock' or 'expiration'
+    last_notified = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    resolved = db.Column(db.Boolean, default=False, nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'alert_type': self.alert_type,
+            'last_notified': self.last_notified.isoformat() if self.last_notified else None,
+            'resolved': self.resolved
         }
 
 
