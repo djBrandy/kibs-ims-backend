@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
 from app.config import Config
-import random
 import os
 from datetime import datetime, timedelta
 
@@ -62,36 +61,17 @@ def add_cors_headers(response):
     return response
 
 
-# PROPERLY CONFIGURE THIS LATER FOR PRODUCTION, BEFORE DEPLOYMENT AND AFTER COMPLETION OF EVERYTHING ELSE.
 @app.before_request
 def check_session_timeout():
     
     return None
-    
-    # Original authentication code (commented out for now)
-    """
-    # Skip auth endpoints and static files
-    if request.endpoint and 'static' not in request.endpoint and not request.path.startswith('/api/auth'):
-        # Check if user is authenticated
-        if not session.get('authenticated'):
-            # If this is an API request, return 401 Unauthorized
-            if request.path.startswith('/api/'):
-                return jsonify({'success': False, 'message': 'Authentication required'}), 401
-            # For non-API requests, redirect to login page
-            return redirect('/login')
-        
-        # Check for session timeout
-        last_activity = session.get('last_activity')
-        if last_activity:
-            now = datetime.now().timestamp()
-            if now - last_activity > 15 * 60:  # 15 minutes in seconds
-                session.clear()
-                if request.path.startswith('/api/'):
-                    return jsonify({'success': False, 'message': 'Session expired, please login again'}), 401
-                return redirect('/login')
-            else:
-                session['last_activity'] = now
-    """
+
+# Route to serve the service worker from the root
+@app.route('/service-worker.js')
+def sw():
+    # By default, app.static_folder is 'static' relative to app.root_path (i.e., 'app/static/')
+    return app.send_static_file('service-worker.js')
+
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -125,9 +105,7 @@ class Product(db.Model):
     product_images = db.Column(db.LargeBinary, nullable=True)
     date_of_entry = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    # relationship with purchases
     purchases = db.relationship('Purchase', backref='product', lazy=True)
-    order_items = db.relationship('OrderItem', backref='product', lazy=True)
 
 
 class Supplier(db.Model):
@@ -213,7 +191,6 @@ class AuditLog(db.Model):
     notes = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    # relationship with product
     product = db.relationship('Product', backref='audit_logs', lazy=True)
     
     def to_dict(self):
@@ -245,7 +222,6 @@ class InventoryAnalytics(db.Model):
     revenue_rank = db.Column(db.Integer, nullable=True)   
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # relationship with product
     product = db.relationship('Product', backref='analytics', lazy=True)
     
     def to_dict(self):
@@ -272,7 +248,6 @@ class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     
-    # relationship with products - using the string category field as foreign key
     products = db.relationship('Product', 
                               primaryjoin="Category.name==Product.category",
                               backref='category_rel', 
@@ -289,7 +264,6 @@ class Order(db.Model):
     order_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     status = db.Column(db.String(50), default='pending', nullable=False)
 
-    # relationship with order items
     items = db.relationship('OrderItem', backref='order', lazy=True)
 
 
@@ -303,6 +277,5 @@ class OrderItem(db.Model):
     price = db.Column(db.Float, nullable=True) 
 
 
-# import and register blueprints
 from routes import register_blueprints
 register_blueprints(app)

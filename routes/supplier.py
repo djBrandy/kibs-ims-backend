@@ -10,7 +10,6 @@ supplier_bp = Blueprint('supplier', __name__, url_prefix='/api/suppliers')
 @cross_origin()
 @login_required
 def get_all_suppliers():
-    """Get all suppliers"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -21,7 +20,6 @@ def get_all_suppliers():
 @cross_origin()
 @login_required
 def get_supplier(supplier_id):
-    """Get a specific supplier by ID"""
     if request.method == 'OPTIONS':
         return '', 200
         
@@ -32,13 +30,11 @@ def get_supplier(supplier_id):
 @cross_origin()
 @login_required
 def create_supplier():
-    """Create a new supplier"""
     if request.method == 'OPTIONS':
         return '', 200
         
     data = request.get_json()
     
-    # Validate required fields
     if not data.get('shop_name') or not data.get('primary_contact'):
         return jsonify({'error': 'Shop name and primary contact are required'}), 400
     
@@ -60,14 +56,12 @@ def create_supplier():
 @cross_origin()
 @login_required
 def update_supplier(supplier_id):
-    """Update an existing supplier"""
     if request.method == 'OPTIONS':
         return '', 200
         
     supplier = Supplier.query.get_or_404(supplier_id)
     data = request.get_json()
     
-    # Validate required fields
     if not data.get('shop_name') or not data.get('primary_contact'):
         return jsonify({'error': 'Shop name and primary contact are required'}), 400
     
@@ -87,7 +81,6 @@ def update_supplier(supplier_id):
 @cross_origin()
 @login_required
 def delete_supplier(supplier_id):
-    """Delete a supplier"""
     if request.method == 'OPTIONS':
         return '', 200
         

@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 from app import db
 from app import Product
+import base64
 import random
 from routes.auth import login_required
 import traceback
@@ -33,7 +34,6 @@ def get_all_products():
         products = query.all()
 
         if detailed:
-            # Return full product details
             return jsonify([{
                 "id": product.id,
                 "product_name": product.product_name,
@@ -57,11 +57,10 @@ def get_all_products():
                 "checkbox_controlled_substance": product.checkbox_controlled_substance,
                 "checkbox_requires_regular_calibration": product.checkbox_requires_regular_calibration,
                 "special_instructions": product.special_instructions,
-                "product_images": product.product_images.decode('utf-8') if product.product_images else None,
+                "product_images": base64.b64encode(product.product_images).decode('utf-8') if product.product_images else None,
                 "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
             } for product in products]), 200
         else:
-            # Return basic product info
             return jsonify([{
                 "id": product.id,
                 "product_name": product.product_name,
@@ -111,7 +110,7 @@ def get_product(product_id):
             "checkbox_controlled_substance": product.checkbox_controlled_substance,
             "checkbox_requires_regular_calibration": product.checkbox_requires_regular_calibration,
             "special_instructions": product.special_instructions,
-            "product_images": product.product_images.decode('utf-8') if product.product_images else None,
+            "product_images": base64.b64encode(product.product_images).decode('utf-8') if product.product_images else None,
             "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
         }), 200
 
@@ -162,35 +161,47 @@ def create_product():
         image_data = image_file.read() if image_file else None
 
         try:
-            # Clean and convert numeric values
             price_str = data['price_in_kshs']
             if isinstance(price_str, str):
                 price_str = price_str.replace(',', '')
             price = float(price_str)
-            
+        except (ValueError, TypeError):
+             return jsonify({'error': 'Invalid price value. Must be a number.'}), 400
+
+        try:
             quantity = int(data['quantity'])
-            
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid quantity value. Must be an integer.'}), 400
+
+        try:
             low_stock_alert_value = data.get('low_stock_alert', '10')
             if isinstance(low_stock_alert_value, str) and low_stock_alert_value.strip() == '':
                 low_stock_alert = 10
             else:
                 low_stock_alert = int(low_stock_alert_value)
-            
+        except (ValueError, TypeError):
+             return jsonify({'error': 'Invalid low stock alert value. Must be an integer.'}), 400
+
+        try:
             concentration_value = None
             if data.get('concentration'):
-                if isinstance(data['concentration'], str) and data['concentration'].strip():
-                    concentration_value = float(data['concentration'])
-                elif not isinstance(data['concentration'], str):
-                    concentration_value = float(data['concentration'])
-            
+                conc_input = data['concentration']
+                if isinstance(conc_input, str) and conc_input.strip():
+                    concentration_value = float(conc_input)
+                elif not isinstance(conc_input, str) and conc_input is not None:
+                    concentration_value = float(conc_input)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid concentration value. Must be a number.'}), 400
+
+        try:
             product = Product(
                 product_name=data['product_name'],
                 price_in_kshs=price,
                 product_type=data['product_type'],
                 category=data['category'],
                 product_code=data['product_code'],
-                manufacturer=data['manufacturer'],
-                qr_code=data['qr_code'],
+                manufacturer=data.get('manufacturer'),
+                qr_code=data.get('qr_code'),
                 quantity=quantity,
                 unit_of_measure=data['unit_of_measure'],
                 concentration=concentration_value,
@@ -207,8 +218,12 @@ def create_product():
                 special_instructions=data.get('special_instructions'),
                 product_images=image_data
             )
-        except ValueError as ve:
-            return jsonify({'error': f'Invalid value format: {str(ve)}'}), 400
+        except Exception as e:
+             db.session.rollback()
+             error_details = traceback.format_exc()
+             print(f"Error during product object creation: {str(e)}")
+             print(f"Traceback: {error_details}")
+             return jsonify({'error': f'Server error during product creation: {str(e)}'}), 500
 
         db.session.add(product)
         db.session.commit()
@@ -227,7 +242,6 @@ def create_product():
 @product_bp.route('/<int:product_id>', methods=['PUT'])
 @login_required
 def update_product(product_id):
-    """Update an existing product"""
     try:
         product = Product.query.get_or_404(product_id)
         data = request.get_json()
@@ -286,29 +300,16 @@ def update_product(product_id):
 @product_bp.route('/<int:product_id>', methods=['DELETE'])
 @login_required
 def delete_product(product_id):
-    """Delete a product"""
     try:
         print(f"Attempting to delete product with ID: {product_id}")
         
-        # First, delete related audit logs
         db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product_id}")
-        
-        # Delete related inventory analytics
         db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product_id}")
-        
-        # Delete related alert notifications
         db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product_id}")
-        
-        # Delete any related purchases
         db.session.execute(f"DELETE FROM purchases WHERE product_id = {product_id}")
-        
-        # Delete any related order items
         db.session.execute(f"DELETE FROM order_items WHERE product_id = {product_id}")
-        
-        # Finally delete the product
         db.session.execute(f"DELETE FROM products WHERE id = {product_id}")
         
-        # Commit all changes
         db.session.commit()
         
         return jsonify({'message': 'Product deleted successfully'}), 200

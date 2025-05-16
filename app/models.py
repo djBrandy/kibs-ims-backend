@@ -6,14 +6,13 @@ class AuditLog(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    user_id = db.Column(db.Integer, nullable=True)  # For future user authentication
-    action_type = db.Column(db.String(50), nullable=False)  # 'quantity_update', 'concentration_update', etc.
+    user_id = db.Column(db.Integer, nullable=True) 
+    action_type = db.Column(db.String(50), nullable=False)  
     previous_value = db.Column(db.String(255), nullable=True)
     new_value = db.Column(db.String(255), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    # Relationship with product
     product = db.relationship('Product', backref='audit_logs', lazy=True)
     
     def to_dict(self):
@@ -40,11 +39,10 @@ class InventoryAnalytics(db.Model):
     is_dead_stock = db.Column(db.Boolean, default=False)
     is_slow_moving = db.Column(db.Boolean, default=False)
     is_top_product = db.Column(db.Boolean, default=False)
-    movement_rank = db.Column(db.Integer, nullable=True)  # Lower is faster moving
-    revenue_rank = db.Column(db.Integer, nullable=True)   # Lower is higher revenue
+    movement_rank = db.Column(db.Integer, nullable=True)  
+    revenue_rank = db.Column(db.Integer, nullable=True)   
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationship with product
     product = db.relationship('Product', backref='analytics', lazy=True)
     
     def to_dict(self):

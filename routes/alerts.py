@@ -11,16 +11,16 @@ alerts_bp = Blueprint('alerts', __name__, url_prefix='/api/alerts')
 @login_required
 def get_alerts():
     try:
-        # Get current date
+
         today = datetime.now().date()
         expiration_threshold = today + timedelta(days=3)
         
         print(f"Current date: {today}, Expiration threshold: {expiration_threshold}")
         
-        # Get products with low stock
+
         low_stock_products = Product.query.filter(
             Product.quantity <= Product.low_stock_alert,
-            Product.quantity > 0  # Only include products that are not out of stock
+            Product.quantity > 0  
         ).all()
         
         print(f"Found {len(low_stock_products)} products with low stock")
@@ -29,19 +29,13 @@ def get_alerts():
         expiring_products = Product.query.filter(
             Product.expiration_date.isnot(None),
             Product.expiration_date <= expiration_threshold,
-            Product.expiration_date >= today,  # Only include products that haven't expired yet
-            Product.checkbox_expiry_date == True  # Only include products that have expiry date checkbox checked
+            Product.expiration_date >= today,
+            Product.checkbox_expiry_date == True
         ).all()
         
         print(f"Found {len(expiring_products)} products near expiration")
         
-        # Debug: Print all products with expiration dates
-        all_products_with_dates = Product.query.filter(Product.expiration_date.isnot(None)).all()
-        print(f"All products with expiration dates:")
-        for p in all_products_with_dates:
-            print(f"  - {p.product_name}: {p.expiration_date}, checkbox_expiry_date: {p.checkbox_expiry_date}")
         
-        # Combine alerts
         alerts = []
         
         # Process low stock alerts

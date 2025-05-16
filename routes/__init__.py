@@ -1,4 +1,3 @@
-# ims-kibs-backend/routes/__init__.py
 from routes.products import product_bp
 from routes.audit import audit_bp
 from routes.supplier import supplier_bp
@@ -15,4 +14,3 @@ def register_blueprints(app):
     app.register_blueprint(alerts_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(analytics_bp)
-    # Register other blueprints here as needed

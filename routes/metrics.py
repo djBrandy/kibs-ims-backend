@@ -12,14 +12,11 @@ metrics_bp = Blueprint('metrics', __name__, url_prefix='/api/metrics')
 @login_required
 def get_performance_metrics():
     try:
-        # Calculate inventory stock worth (sum of price * quantity for all products)
         inventory_worth = db.session.query(func.sum(Product.price_in_kshs * Product.quantity)).scalar() or 0
         
-        # Get previous period for comparison
         thirty_days_ago = datetime.now() - timedelta(days=30)
         sixty_days_ago = datetime.now() - timedelta(days=60)
         
-        # Count number of audits from the database
         audit_count = AuditLog.query.filter(
             AuditLog.timestamp >= thirty_days_ago
         ).count()
@@ -27,36 +24,27 @@ def get_performance_metrics():
             AuditLog.timestamp >= sixty_days_ago,
             AuditLog.timestamp < thirty_days_ago
         ).count()
-        
-        # Get new products (added in the last 30 days)
         new_products = Product.query.filter(Product.date_of_entry >= thirty_days_ago).count()
-        
-        # Get supplier count (unique manufacturers)
         supplier_count = db.session.query(func.count(func.distinct(Product.manufacturer))).scalar() or 0
         
-        # Calculate inventory turnover (actual calculation based on purchases)
-        # Get total purchases in the last 30 days
         total_purchases = db.session.query(func.sum(Purchase.total_price)).filter(
             Purchase.purchase_date >= thirty_days_ago
         ).scalar() or 0
         
-        avg_inventory_value = inventory_worth / 2  # Simplified calculation
+        avg_inventory_value = inventory_worth / 2
         inventory_turnover = total_purchases / avg_inventory_value if avg_inventory_value > 0 else 0
         
-        # Calculate average order value from actual purchases
         recent_purchases = Purchase.query.filter(Purchase.purchase_date >= thirty_days_ago).all()
         if recent_purchases:
             avg_order_value = sum(p.total_price for p in recent_purchases) / len(recent_purchases)
         else:
             avg_order_value = 0
         
-        # Calculate changes by comparing with previous period
         previous_inventory_worth = db.session.query(
             func.sum(Product.price_in_kshs * Product.quantity)
         ).filter(
             Product.date_of_entry < thirty_days_ago
         ).scalar() or 0
-        
         if previous_inventory_worth > 0:
             inventory_worth_change = ((inventory_worth - previous_inventory_worth) / previous_inventory_worth) * 100
         else:
@@ -64,7 +52,6 @@ def get_performance_metrics():
         
         audit_count_change = audit_count - previous_audit_count
         
-        # Previous period inventory turnover
         previous_purchases = db.session.query(func.sum(Purchase.total_price)).filter(
             Purchase.purchase_date >= sixty_days_ago,
             Purchase.purchase_date < thirty_days_ago
@@ -73,22 +60,17 @@ def get_performance_metrics():
         previous_inventory_turnover = previous_purchases / avg_inventory_value if avg_inventory_value > 0 else 0
         inventory_turnover_change = inventory_turnover - previous_inventory_turnover
         
-        # Previous period new products
         previous_new_products = Product.query.filter(
             Product.date_of_entry >= sixty_days_ago,
             Product.date_of_entry < thirty_days_ago
         ).count()
-        
         new_products_change = new_products - previous_new_products
         
-        # Previous period supplier count
         previous_supplier_count = Supplier.query.filter(
             Supplier.created_at < thirty_days_ago
         ).count()
-        
         supplier_count_change = supplier_count - previous_supplier_count
         
-        # Previous period average order value
         previous_period_purchases = Purchase.query.filter(
             Purchase.purchase_date >= sixty_days_ago,
             Purchase.purchase_date < thirty_days_ago
@@ -135,64 +117,48 @@ def get_performance_metrics():
 @login_required
 def get_metric_chart_data(metric_type):
     try:
-        # Get time range from query parameters (default to 'month')
         time_range = request.args.get('range', 'month')
         
-        # Define time periods based on range
         if time_range == 'day':
-            # Hourly data for the past 24 hours
             periods = 24
             period_format = '%H:00'
             delta = timedelta(hours=1)
             start_time = datetime.now() - timedelta(days=1)
         elif time_range == 'week':
-            # Daily data for the past 7 days
             periods = 7
             period_format = '%a'
             delta = timedelta(days=1)
             start_time = datetime.now() - timedelta(days=7)
         elif time_range == 'year':
-            # Monthly data for the past 12 months
             periods = 12
             period_format = '%b'
             delta = timedelta(days=30)
             start_time = datetime.now() - timedelta(days=365)
-        else:  # month (default)
-            # Daily data for the past 30 days
+        else:
             periods = 30
             period_format = '%d %b'
             delta = timedelta(days=1)
             start_time = datetime.now() - timedelta(days=30)
         
-        # Generate labels for the time periods
         labels = []
         data = []
         
-        # For auditCount, get real data from the database
         if metric_type == 'auditCount':
             current_time = start_time
             for i in range(periods):
                 period_end = current_time + delta
                 labels.append(current_time.strftime(period_format))
-                
-                # Query the database for audit logs in this time period
                 count = AuditLog.query.filter(
                     AuditLog.timestamp >= current_time,
                     AuditLog.timestamp < period_end
                 ).count()
-                
                 data.append(count)
                 current_time = period_end
         else:
-            # For other metrics, keep the existing implementation
             current_time = start_time
             for i in range(periods):
                 labels.append(current_time.strftime(period_format))
-                
-                # Generate different data patterns based on metric type
                 if metric_type == 'inventoryWorth':
-                    # For inventory worth, we could calculate the value at different points in time
-                    # This is a simplified approach - in a real system, you'd query historical data
                     base_value = 10000
                     variation = 2000 * (0.5 + (i / periods))
                     data.append(base_value + variation)
@@ -201,7 +167,6 @@ def get_metric_chart_data(metric_type):
                 elif metric_type == 'newProducts':
                     data.append(2 if i % 4 == 0 else 0)  # New products added periodically
                 elif metric_type == 'supplierCount':
-                    # Supplier count occasionally increases
                     data.append(20 + (1 if i % 10 == 0 and i > 0 else 0))
                 elif metric_type == 'avgOrderValue':
                     base_value = 120
@@ -225,40 +190,28 @@ def get_metric_chart_data(metric_type):
 @login_required
 def get_audit_logs():
     try:
-        # Get query parameters
         limit = request.args.get('limit', 10, type=int)
         product_id = request.args.get('product_id', type=int)
         action_type = request.args.get('action_type')
         days = request.args.get('days', type=int)
         
-        # Start with a base query
         query = AuditLog.query
         
-        # Apply filters
         if product_id:
             query = query.filter(AuditLog.product_id == product_id)
-        
         if action_type:
             query = query.filter(AuditLog.action_type == action_type)
-        
         if days:
             cutoff_date = datetime.now() - timedelta(days=days)
             query = query.filter(AuditLog.timestamp >= cutoff_date)
         
-        # Order by timestamp descending (newest first)
         query = query.order_by(AuditLog.timestamp.desc())
-        
-        # Apply limit
         query = query.limit(limit)
-        
-        # Execute query and get logs
         logs = query.all()
         
-        # Convert to list of dictionaries with formatted date and time
         result = []
         for log in logs:
             log_dict = log.to_dict()
-            # Add formatted date and time fields for frontend
             if log.timestamp:
                 log_dict['date'] = log.timestamp.strftime('%Y-%m-%d')
                 log_dict['time'] = log.timestamp.strftime('%H:%M:%S')

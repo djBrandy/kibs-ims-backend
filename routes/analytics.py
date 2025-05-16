@@ -10,45 +10,33 @@ analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 @analytics_bp.route('/update', methods=['POST'])
 @login_required
 def update_analytics():
-    """Update inventory analytics data"""
     try:
         from app import InventoryAnalytics, AuditLog, Product
         from sqlalchemy import func
         
-        # Get all products
         products = Product.query.all()
         
         for product in products:
-            # Find the last audit log for this product that changed quantity
             last_movement = AuditLog.query.filter(
                 AuditLog.product_id == product.id,
                 AuditLog.action_type == 'quantity_update'
             ).order_by(AuditLog.timestamp.desc()).first()
             
-            # Calculate days without movement
             days_without_movement = None
             last_movement_date = None
             if last_movement:
                 last_movement_date = last_movement.timestamp
                 days_without_movement = (datetime.now() - last_movement_date).days
             
-            # Count stockouts (when quantity was set to 0)
             stockout_logs = AuditLog.query.filter(
                 AuditLog.product_id == product.id,
                 AuditLog.action_type == 'quantity_update',
                 AuditLog.new_value == '0'
             ).all()
-            
             stockout_count = len(stockout_logs)
             last_stockout_date = stockout_logs[0].timestamp if stockout_logs else None
-            
-            # Determine if it's dead stock (no movement in 90+ days)
             is_dead_stock = days_without_movement >= 90 if days_without_movement else False
-            
-            # Determine if it's slow-moving (no movement in 30-90 days)
             is_slow_moving = (days_without_movement >= 30 and days_without_movement < 90) if days_without_movement else False
-            
-            # Check if analytics record exists for this product
             analytics = InventoryAnalytics.query.filter_by(product_id=product.id).first()
             
             if analytics:
@@ -61,7 +49,6 @@ def update_analytics():
                 analytics.is_slow_moving = is_slow_moving
                 analytics.last_updated = datetime.now()
             else:
-                # Create new record
                 analytics = InventoryAnalytics(
                     product_id=product.id,
                     last_movement_date=last_movement_date,
@@ -73,7 +60,6 @@ def update_analytics():
                 )
                 db.session.add(analytics)
         
-        # Calculate movement ranks based on frequency of quantity updates
         movement_counts = db.session.query(
             AuditLog.product_id,
             func.count(AuditLog.id).label('movement_count')
@@ -85,12 +71,11 @@ def update_analytics():
             func.count(AuditLog.id).desc()
         ).all()
         
-        # Update movement ranks
         for rank, (product_id, _) in enumerate(movement_counts, 1):
             analytics = InventoryAnalytics.query.filter_by(product_id=product_id).first()
             if analytics:
                 analytics.movement_rank = rank
-                analytics.is_top_product = rank <= 5  # Top 5 products
+                analytics.is_top_product = rank <= 5
         
         db.session.commit()
         return jsonify({'success': True, 'message': 'Analytics updated successfully'}), 200
@@ -105,11 +90,9 @@ def update_analytics():
 @analytics_bp.route('/stockout', methods=['GET'])
 @login_required
 def get_stockout_data():
-    """Get stockout rate data"""
     try:
         from app import InventoryAnalytics, Product
         
-        # Get products with stockout data
         stockout_data = db.session.query(
             InventoryAnalytics, Product
         ).join(
@@ -140,11 +123,9 @@ def get_stockout_data():
 @analytics_bp.route('/dead-stock', methods=['GET'])
 @login_required
 def get_dead_stock():
-    """Get dead stock items (no movement in 90 days)"""
     try:
         from app import InventoryAnalytics, Product
         
-        # Get dead stock items
         dead_stock = db.session.query(
             InventoryAnalytics, Product
         ).join(
@@ -177,11 +158,9 @@ def get_dead_stock():
 @analytics_bp.route('/top-products', methods=['GET'])
 @login_required
 def get_top_products():
-    """Get top-moving products"""
     try:
         from app import InventoryAnalytics, Product
         
-        # Get top products by movement rank
         top_products = db.session.query(
             InventoryAnalytics, Product
         ).join(
@@ -213,11 +192,9 @@ def get_top_products():
 @analytics_bp.route('/slow-moving', methods=['GET'])
 @login_required
 def get_slow_moving():
-    """Get slow-moving items (no movement in 30 days but less than 90)"""
     try:
         from app import InventoryAnalytics, Product
         
-        # Get slow-moving items
         slow_moving = db.session.query(
             InventoryAnalytics, Product
         ).join(
