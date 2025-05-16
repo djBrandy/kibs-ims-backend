@@ -3,16 +3,20 @@ from datetime import datetime
 from app import db
 from app import Product
 import random
+from routes.auth import login_required
+import traceback
 
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
 
 @product_bp.route('/', methods=['GET'])
+@login_required
 def get_all_products():
     try:
         category = request.args.get('category')
         product_type = request.args.get('product_type')
         low_stock = request.args.get('low_stock', type=bool)
+        detailed = request.args.get('detailed', type=bool, default=False)
 
         query = Product.query
 
@@ -28,26 +32,58 @@ def get_all_products():
 
         products = query.all()
 
-        return jsonify([{
-            "id": product.id,
-            "product_name": product.product_name,
-            "product_code": product.product_code,
-            "qr_code": product.qr_code,
-            "price_in_kshs": product.price_in_kshs,
-            "quantity": product.quantity,
-            "unit_of_measure": product.unit_of_measure,
-            "category": product.category,
-            "product_type": product.product_type,
-            "manufacturer": product.manufacturer,
-            "low_stock_alert": product.low_stock_alert,
-            "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
-        } for product in products]), 200
+        if detailed:
+            # Return full product details
+            return jsonify([{
+                "id": product.id,
+                "product_name": product.product_name,
+                "product_type": product.product_type,
+                "category": product.category,
+                "product_code": product.product_code,
+                "manufacturer": product.manufacturer,
+                "qr_code": product.qr_code,
+                "price_in_kshs": product.price_in_kshs,
+                "quantity": product.quantity,
+                "unit_of_measure": product.unit_of_measure,
+                "concentration": product.concentration,
+                "storage_temperature": product.storage_temperature,
+                "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
+                "hazard_level": product.hazard_level,
+                "protocol_link": product.protocol_link,
+                "msds_link": product.msds_link,
+                "low_stock_alert": product.low_stock_alert,
+                "checkbox_expiry_date": product.checkbox_expiry_date,
+                "checkbox_hazardous_material": product.checkbox_hazardous_material,
+                "checkbox_controlled_substance": product.checkbox_controlled_substance,
+                "checkbox_requires_regular_calibration": product.checkbox_requires_regular_calibration,
+                "special_instructions": product.special_instructions,
+                "product_images": product.product_images.decode('utf-8') if product.product_images else None,
+                "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
+            } for product in products]), 200
+        else:
+            # Return basic product info
+            return jsonify([{
+                "id": product.id,
+                "product_name": product.product_name,
+                "product_code": product.product_code,
+                "qr_code": product.qr_code,
+                "price_in_kshs": product.price_in_kshs,
+                "quantity": product.quantity,
+                "unit_of_measure": product.unit_of_measure,
+                "category": product.category,
+                "product_type": product.product_type,
+                "manufacturer": product.manufacturer,
+                "low_stock_alert": product.low_stock_alert,
+                "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
+            } for product in products]), 200
 
     except Exception as e:
+        print(f"Error fetching products: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
 @product_bp.route('/<int:product_id>', methods=['GET'])
+@login_required
 def get_product(product_id):
     try:
         product = Product.query.get_or_404(product_id)
@@ -80,6 +116,7 @@ def get_product(product_id):
         }), 200
 
     except Exception as e:
+        print(f"Error getting product {product_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
 
@@ -93,9 +130,9 @@ def to_bool(value):
 
 
 @product_bp.route('/', methods=['POST'])
+@login_required
 def create_product():
     try:
-
         if request.content_type == 'application/json':
             data = request.get_json() 
         else:
@@ -124,31 +161,54 @@ def create_product():
 
         image_data = image_file.read() if image_file else None
 
-
-        product = Product(
-            product_name=data['product_name'],
-            price_in_kshs=float(data['price_in_kshs']),
-            product_type=data['product_type'],
-            category=data['category'],
-            product_code=data['product_code'],
-            manufacturer=data['manufacturer'],
-            qr_code=data['qr_code'],
-            quantity=int(data['quantity']),
-            unit_of_measure=data['unit_of_measure'],
-            concentration=float(data['concentration']) if data.get('concentration') else None,
-            storage_temperature=data.get('storage_temperature'),
-            expiration_date=expiration_date,
-            hazard_level=data.get('hazard_level'),
-            protocol_link=data.get('protocol_link'),
-            msds_link=data.get('msds_link'),
-            low_stock_alert=int(data.get('low_stock_alert', 10)),
-            checkbox_expiry_date=to_bool(data.get('checkbox_expiry_date', 'false')),
-            checkbox_hazardous_material=to_bool(data.get('checkbox_hazardous_material', 'false')),
-            checkbox_controlled_substance=to_bool(data.get('checkbox_controlled_substance', 'false')),
-            checkbox_requires_regular_calibration=to_bool(data.get('checkbox_requires_regular_calibration', 'false')),
-            special_instructions=data.get('special_instructions'),
-            product_images=image_data
-        )
+        try:
+            # Clean and convert numeric values
+            price_str = data['price_in_kshs']
+            if isinstance(price_str, str):
+                price_str = price_str.replace(',', '')
+            price = float(price_str)
+            
+            quantity = int(data['quantity'])
+            
+            low_stock_alert_value = data.get('low_stock_alert', '10')
+            if isinstance(low_stock_alert_value, str) and low_stock_alert_value.strip() == '':
+                low_stock_alert = 10
+            else:
+                low_stock_alert = int(low_stock_alert_value)
+            
+            concentration_value = None
+            if data.get('concentration'):
+                if isinstance(data['concentration'], str) and data['concentration'].strip():
+                    concentration_value = float(data['concentration'])
+                elif not isinstance(data['concentration'], str):
+                    concentration_value = float(data['concentration'])
+            
+            product = Product(
+                product_name=data['product_name'],
+                price_in_kshs=price,
+                product_type=data['product_type'],
+                category=data['category'],
+                product_code=data['product_code'],
+                manufacturer=data['manufacturer'],
+                qr_code=data['qr_code'],
+                quantity=quantity,
+                unit_of_measure=data['unit_of_measure'],
+                concentration=concentration_value,
+                storage_temperature=data.get('storage_temperature'),
+                expiration_date=expiration_date,
+                hazard_level=data.get('hazard_level'),
+                protocol_link=data.get('protocol_link'),
+                msds_link=data.get('msds_link'),
+                low_stock_alert=low_stock_alert,
+                checkbox_expiry_date=to_bool(data.get('checkbox_expiry_date', 'false')),
+                checkbox_hazardous_material=to_bool(data.get('checkbox_hazardous_material', 'false')),
+                checkbox_controlled_substance=to_bool(data.get('checkbox_controlled_substance', 'false')),
+                checkbox_requires_regular_calibration=to_bool(data.get('checkbox_requires_regular_calibration', 'false')),
+                special_instructions=data.get('special_instructions'),
+                product_images=image_data
+            )
+        except ValueError as ve:
+            return jsonify({'error': f'Invalid value format: {str(ve)}'}), 400
 
         db.session.add(product)
         db.session.commit()
@@ -157,11 +217,15 @@ def create_product():
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        error_details = traceback.format_exc()
+        print(f"Error creating product: {str(e)}")
+        print(f"Traceback: {error_details}")
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
     
 
 
 @product_bp.route('/<int:product_id>', methods=['PUT'])
+@login_required
 def update_product(product_id):
     """Update an existing product"""
     try:
@@ -215,20 +279,31 @@ def update_product(product_id):
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error updating product {product_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
 @product_bp.route('/<int:product_id>', methods=['DELETE'])
+@login_required
 def delete_product(product_id):
     """Delete a product"""
     try:
         print(f"Attempting to delete product with ID: {product_id}")
         
-        # First, delete related alert notifications
+        # First, delete related audit logs
+        db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product_id}")
+        
+        # Delete related inventory analytics
+        db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product_id}")
+        
+        # Delete related alert notifications
         db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product_id}")
         
-        # Then delete any related purchases
+        # Delete any related purchases
         db.session.execute(f"DELETE FROM purchases WHERE product_id = {product_id}")
+        
+        # Delete any related order items
+        db.session.execute(f"DELETE FROM order_items WHERE product_id = {product_id}")
         
         # Finally delete the product
         db.session.execute(f"DELETE FROM products WHERE id = {product_id}")

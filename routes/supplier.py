@@ -2,11 +2,13 @@ from flask import Blueprint, request, jsonify
 from app import db, Supplier
 from datetime import datetime
 from flask_cors import cross_origin
+from routes.auth import login_required
 
 supplier_bp = Blueprint('supplier', __name__, url_prefix='/api/suppliers')
 
 @supplier_bp.route('/', methods=['GET', 'OPTIONS'])
 @cross_origin()
+@login_required
 def get_all_suppliers():
     """Get all suppliers"""
     if request.method == 'OPTIONS':
@@ -17,6 +19,7 @@ def get_all_suppliers():
 
 @supplier_bp.route('/<int:supplier_id>', methods=['GET', 'OPTIONS'])
 @cross_origin()
+@login_required
 def get_supplier(supplier_id):
     """Get a specific supplier by ID"""
     if request.method == 'OPTIONS':
@@ -27,6 +30,7 @@ def get_supplier(supplier_id):
 
 @supplier_bp.route('/', methods=['POST', 'OPTIONS'])
 @cross_origin()
+@login_required
 def create_supplier():
     """Create a new supplier"""
     if request.method == 'OPTIONS':
@@ -54,6 +58,7 @@ def create_supplier():
 
 @supplier_bp.route('/<int:supplier_id>', methods=['PUT', 'OPTIONS'])
 @cross_origin()
+@login_required
 def update_supplier(supplier_id):
     """Update an existing supplier"""
     if request.method == 'OPTIONS':
@@ -80,6 +85,7 @@ def update_supplier(supplier_id):
 
 @supplier_bp.route('/<int:supplier_id>', methods=['DELETE', 'OPTIONS'])
 @cross_origin()
+@login_required
 def delete_supplier(supplier_id):
     """Delete a supplier"""
     if request.method == 'OPTIONS':

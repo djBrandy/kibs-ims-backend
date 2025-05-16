@@ -1,27 +1,45 @@
 from flask import Blueprint, jsonify
 from app import db, Product, Purchase, AlertNotification, Supplier
 from datetime import datetime, timedelta
-import requests
-import os
+from routes.auth import login_required
+import traceback
 from sqlalchemy import desc
 
 alerts_bp = Blueprint('alerts', __name__, url_prefix='/api/alerts')
 
 @alerts_bp.route('/', methods=['GET'])
+@login_required
 def get_alerts():
     try:
         # Get current date
         today = datetime.now().date()
         expiration_threshold = today + timedelta(days=3)
         
+        print(f"Current date: {today}, Expiration threshold: {expiration_threshold}")
+        
         # Get products with low stock
-        low_stock_products = Product.query.filter(Product.quantity <= Product.low_stock_alert).all()
+        low_stock_products = Product.query.filter(
+            Product.quantity <= Product.low_stock_alert,
+            Product.quantity > 0  # Only include products that are not out of stock
+        ).all()
+        
+        print(f"Found {len(low_stock_products)} products with low stock")
         
         # Get products near expiration
         expiring_products = Product.query.filter(
             Product.expiration_date.isnot(None),
-            Product.expiration_date <= expiration_threshold
+            Product.expiration_date <= expiration_threshold,
+            Product.expiration_date >= today,  # Only include products that haven't expired yet
+            Product.checkbox_expiry_date == True  # Only include products that have expiry date checkbox checked
         ).all()
+        
+        print(f"Found {len(expiring_products)} products near expiration")
+        
+        # Debug: Print all products with expiration dates
+        all_products_with_dates = Product.query.filter(Product.expiration_date.isnot(None)).all()
+        print(f"All products with expiration dates:")
+        for p in all_products_with_dates:
+            print(f"  - {p.product_name}: {p.expiration_date}, checkbox_expiry_date: {p.checkbox_expiry_date}")
         
         # Combine alerts
         alerts = []
@@ -81,13 +99,18 @@ def get_alerts():
                 'last_purchase_date': last_purchase_date.isoformat() if last_purchase_date else None
             })
         
+        print(f"Returning {len(alerts)} total alerts")
         return jsonify(alerts), 200
     
     except Exception as e:
+        error_details = traceback.format_exc()
+        print(f"Error in get_alerts: {str(e)}")
+        print(f"Traceback: {error_details}")
         return jsonify({'error': str(e)}), 500
 
 
 @alerts_bp.route('/send-notifications', methods=['POST'])
+@login_required
 def send_notifications():
     try:
         # Get current date and time
@@ -97,12 +120,17 @@ def send_notifications():
         expiration_threshold = today + timedelta(days=3)
         
         # Get products with low stock
-        low_stock_products = Product.query.filter(Product.quantity <= Product.low_stock_alert).all()
+        low_stock_products = Product.query.filter(
+            Product.quantity <= Product.low_stock_alert,
+            Product.quantity > 0  # Only include products that are not out of stock
+        ).all()
         
         # Get products near expiration
         expiring_products = Product.query.filter(
             Product.expiration_date.isnot(None),
-            Product.expiration_date <= expiration_threshold
+            Product.expiration_date <= expiration_threshold,
+            Product.expiration_date >= today,  # Only include products that haven't expired yet
+            Product.checkbox_expiry_date == True  # Only include products that have expiry date checkbox checked
         ).all()
         
         notifications_sent = 0
@@ -172,6 +200,9 @@ def send_notifications():
     
     except Exception as e:
         db.session.rollback()
+        error_details = traceback.format_exc()
+        print(f"Error in send_notifications: {str(e)}")
+        print(f"Traceback: {error_details}")
         return jsonify({'error': str(e)}), 500
 
 

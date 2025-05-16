@@ -17,10 +17,15 @@ with app.app_context():
 
     # Populate Products
     products = []
-    for _ in range(20):  # Create 20 products
+    for _ in range(20):  
         product = Product(
-            name=fake.word().capitalize(),
-            stock=random.randint(10, 100),
+            product_name=fake.word().capitalize(),
+            product_type=fake.word().capitalize(),
+            category=random.choice(categories).name,
+            qr_code=fake.uuid4()[:16],
+            price_in_kshs=random.uniform(100, 5000),
+            quantity=random.randint(10, 100),
+            unit_of_measure="units"
         )
         db.session.add(product)
         products.append(product)

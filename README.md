@@ -1,53 +1,51 @@
-# IMS KIBS Backend
+# KIBS Inventory Management System - Backend
 
-## Overview
-IMS KIBS is a Flask-based application designed to manage inventory and order processing. This project provides a structured approach to handle products, categories, and orders efficiently.
+## Database Tables Issue Fix
 
-## Project Structure
-```
-ims-kibs-backend
-├── app
-│   ├── __init__.py
-│   ├── models.py
-│   ├── routes.py
-│   └── templates
-├── config.py
-├── requirements.txt
-└── README.md
+There's an issue with missing database tables for audit logs and inventory analytics. To fix this issue, follow these steps:
+
+1. Make sure your virtual environment is activated (if you're using one)
+
+2. Run the following command from the project root directory:
+
+```bash
+python -m ims-kibs-backend.migrations.create_tables
 ```
 
-## Setup Instructions
+3. If you encounter any issues, you can manually create the tables by running these SQL commands in your database:
 
-1. **Clone the Repository**
-   ```bash
-   git clone <repository-url>
-   cd ims-kibs-backend
-   ```
+```sql
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    product_id INTEGER NOT NULL,
+    user_id INTEGER,
+    action_type VARCHAR(50) NOT NULL,
+    previous_value VARCHAR(255),
+    new_value VARCHAR(255),
+    notes TEXT,
+    timestamp DATETIME NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
 
-2. **Create a Virtual Environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
+CREATE TABLE IF NOT EXISTS inventory_analytics (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    product_id INTEGER NOT NULL,
+    last_movement_date DATETIME,
+    days_without_movement INTEGER,
+    stockout_count INTEGER NOT NULL DEFAULT 0,
+    last_stockout_date DATETIME,
+    is_dead_stock BOOLEAN NOT NULL DEFAULT 0,
+    is_slow_moving BOOLEAN NOT NULL DEFAULT 0,
+    is_top_product BOOLEAN NOT NULL DEFAULT 0,
+    movement_rank INTEGER,
+    revenue_rank INTEGER,
+    last_updated DATETIME NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+```
 
-3. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+4. Restart the backend server after creating the tables.
 
-4. **Configure the Application**
-   Update the `config.py` file with your database connection details and any other necessary configurations.
+## Note
 
-5. **Run the Application**
-   ```bash
-   flask run
-   ```
-
-## Usage
-Once the application is running, you can access it at `http://127.0.0.1:5000`. The application provides endpoints to manage products, categories, and orders.
-
-## Contributing
-Contributions are welcome! Please submit a pull request or open an issue for any enhancements or bug fixes.
-
-## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+Until the tables are created, the system will use mock data for audit logs and inventory analytics.

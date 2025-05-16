@@ -1,57 +1,117 @@
 from flask import Blueprint, jsonify, request
 from app import db
-from app import Product
+from app import Product, Purchase, Supplier, AuditLog
 from sqlalchemy import func, desc
 from datetime import datetime, timedelta
+from routes.auth import login_required
 import json
 
 metrics_bp = Blueprint('metrics', __name__, url_prefix='/api/metrics')
 
 @metrics_bp.route('/', methods=['GET'])
+@login_required
 def get_performance_metrics():
     try:
         # Calculate inventory stock worth (sum of price * quantity for all products)
         inventory_worth = db.session.query(func.sum(Product.price_in_kshs * Product.quantity)).scalar() or 0
         
-        # Count number of audits (placeholder - would need an audit log table)
-        # For now, we'll use a mock value
-        audit_count = 24
+        # Get previous period for comparison
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        sixty_days_ago = datetime.now() - timedelta(days=60)
+        
+        # Count number of audits from the database
+        audit_count = AuditLog.query.filter(
+            AuditLog.timestamp >= thirty_days_ago
+        ).count()
+        previous_audit_count = AuditLog.query.filter(
+            AuditLog.timestamp >= sixty_days_ago,
+            AuditLog.timestamp < thirty_days_ago
+        ).count()
         
         # Get new products (added in the last 30 days)
-        thirty_days_ago = datetime.now() - timedelta(days=30)
         new_products = Product.query.filter(Product.date_of_entry >= thirty_days_ago).count()
         
         # Get supplier count (unique manufacturers)
         supplier_count = db.session.query(func.count(func.distinct(Product.manufacturer))).scalar() or 0
         
-        # Calculate inventory turnover (mock calculation)
-        # In a real implementation, this would be: COGS / Average Inventory Value
-        inventory_turnover = 3.2
+        # Calculate inventory turnover (actual calculation based on purchases)
+        # Get total purchases in the last 30 days
+        total_purchases = db.session.query(func.sum(Purchase.total_price)).filter(
+            Purchase.purchase_date >= thirty_days_ago
+        ).scalar() or 0
         
-        # Calculate average order value (mock data)
-        avg_order_value = 122
+        avg_inventory_value = inventory_worth / 2  # Simplified calculation
+        inventory_turnover = total_purchases / avg_inventory_value if avg_inventory_value > 0 else 0
         
-        # Calculate changes (mock data for demonstration)
-        # In a real app, you would compare with previous period
-        inventory_worth_change = 8.3
-        audit_count_change = 4
-        inventory_turnover_change = 0.4
-        new_products_change = 3
-        supplier_count_change = 2
-        avg_order_value_change = 7
+        # Calculate average order value from actual purchases
+        recent_purchases = Purchase.query.filter(Purchase.purchase_date >= thirty_days_ago).all()
+        if recent_purchases:
+            avg_order_value = sum(p.total_price for p in recent_purchases) / len(recent_purchases)
+        else:
+            avg_order_value = 0
+        
+        # Calculate changes by comparing with previous period
+        previous_inventory_worth = db.session.query(
+            func.sum(Product.price_in_kshs * Product.quantity)
+        ).filter(
+            Product.date_of_entry < thirty_days_ago
+        ).scalar() or 0
+        
+        if previous_inventory_worth > 0:
+            inventory_worth_change = ((inventory_worth - previous_inventory_worth) / previous_inventory_worth) * 100
+        else:
+            inventory_worth_change = 0
+        
+        audit_count_change = audit_count - previous_audit_count
+        
+        # Previous period inventory turnover
+        previous_purchases = db.session.query(func.sum(Purchase.total_price)).filter(
+            Purchase.purchase_date >= sixty_days_ago,
+            Purchase.purchase_date < thirty_days_ago
+        ).scalar() or 0
+        
+        previous_inventory_turnover = previous_purchases / avg_inventory_value if avg_inventory_value > 0 else 0
+        inventory_turnover_change = inventory_turnover - previous_inventory_turnover
+        
+        # Previous period new products
+        previous_new_products = Product.query.filter(
+            Product.date_of_entry >= sixty_days_ago,
+            Product.date_of_entry < thirty_days_ago
+        ).count()
+        
+        new_products_change = new_products - previous_new_products
+        
+        # Previous period supplier count
+        previous_supplier_count = Supplier.query.filter(
+            Supplier.created_at < thirty_days_ago
+        ).count()
+        
+        supplier_count_change = supplier_count - previous_supplier_count
+        
+        # Previous period average order value
+        previous_period_purchases = Purchase.query.filter(
+            Purchase.purchase_date >= sixty_days_ago,
+            Purchase.purchase_date < thirty_days_ago
+        ).all()
+        
+        if previous_period_purchases:
+            previous_avg_order_value = sum(p.total_price for p in previous_period_purchases) / len(previous_period_purchases)
+            avg_order_value_change = ((avg_order_value - previous_avg_order_value) / previous_avg_order_value) * 100 if previous_avg_order_value > 0 else 0
+        else:
+            avg_order_value_change = 0
         
         return jsonify({
             "inventoryWorth": {
                 "value": float(inventory_worth),
-                "change": inventory_worth_change
+                "change": round(float(inventory_worth_change), 1)
             },
             "auditCount": {
                 "value": audit_count,
                 "change": audit_count_change
             },
             "inventoryTurnover": {
-                "value": inventory_turnover,
-                "change": inventory_turnover_change
+                "value": round(float(inventory_turnover), 1) if inventory_turnover else 0,
+                "change": round(float(inventory_turnover_change), 1)
             },
             "newProducts": {
                 "value": new_products,
@@ -62,15 +122,17 @@ def get_performance_metrics():
                 "change": supplier_count_change
             },
             "avgOrderValue": {
-                "value": float(avg_order_value),
-                "change": avg_order_value_change
+                "value": round(float(avg_order_value), 2),
+                "change": round(float(avg_order_value_change), 1)
             }
         }), 200
         
     except Exception as e:
+        print(f"Error in get_performance_metrics: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @metrics_bp.route('/chart/<metric_type>', methods=['GET'])
+@login_required
 def get_metric_chart_data(metric_type):
     try:
         # Get time range from query parameters (default to 'month')
@@ -102,34 +164,51 @@ def get_metric_chart_data(metric_type):
             delta = timedelta(days=1)
             start_time = datetime.now() - timedelta(days=30)
         
-        # Generate mock data based on metric type
+        # Generate labels for the time periods
         labels = []
         data = []
         
-        current_time = start_time
-        for i in range(periods):
-            labels.append(current_time.strftime(period_format))
-            
-            # Generate different data patterns based on metric type
-            if metric_type == 'inventoryWorth':
-                base_value = 10000
-                variation = 2000 * (0.5 + (i / periods))
-                data.append(base_value + variation)
-            elif metric_type == 'auditCount':
-                data.append(1 if i % 3 == 0 else 0)  # Audits every 3 periods
-            elif metric_type == 'inventoryTurnover':
-                data.append(3.0 + (i * 0.05))  # Gradually increasing turnover
-            elif metric_type == 'newProducts':
-                data.append(2 if i % 4 == 0 else 0)  # New products added periodically
-            elif metric_type == 'supplierCount':
-                # Supplier count occasionally increases
-                data.append(20 + (1 if i % 10 == 0 and i > 0 else 0))
-            elif metric_type == 'avgOrderValue':
-                base_value = 120
-                variation = 20 * (0.5 + (i / periods))
-                data.append(base_value + variation)
-            
-            current_time += delta
+        # For auditCount, get real data from the database
+        if metric_type == 'auditCount':
+            current_time = start_time
+            for i in range(periods):
+                period_end = current_time + delta
+                labels.append(current_time.strftime(period_format))
+                
+                # Query the database for audit logs in this time period
+                count = AuditLog.query.filter(
+                    AuditLog.timestamp >= current_time,
+                    AuditLog.timestamp < period_end
+                ).count()
+                
+                data.append(count)
+                current_time = period_end
+        else:
+            # For other metrics, keep the existing implementation
+            current_time = start_time
+            for i in range(periods):
+                labels.append(current_time.strftime(period_format))
+                
+                # Generate different data patterns based on metric type
+                if metric_type == 'inventoryWorth':
+                    # For inventory worth, we could calculate the value at different points in time
+                    # This is a simplified approach - in a real system, you'd query historical data
+                    base_value = 10000
+                    variation = 2000 * (0.5 + (i / periods))
+                    data.append(base_value + variation)
+                elif metric_type == 'inventoryTurnover':
+                    data.append(3.0 + (i * 0.05))  # Gradually increasing turnover
+                elif metric_type == 'newProducts':
+                    data.append(2 if i % 4 == 0 else 0)  # New products added periodically
+                elif metric_type == 'supplierCount':
+                    # Supplier count occasionally increases
+                    data.append(20 + (1 if i % 10 == 0 and i > 0 else 0))
+                elif metric_type == 'avgOrderValue':
+                    base_value = 120
+                    variation = 20 * (0.5 + (i / periods))
+                    data.append(base_value + variation)
+                
+                current_time += delta
         
         return jsonify({
             'labels': labels,
@@ -139,4 +218,54 @@ def get_metric_chart_data(metric_type):
         }), 200
         
     except Exception as e:
+        print(f"Error in get_metric_chart_data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@metrics_bp.route('/audit-logs', methods=['GET'])
+@login_required
+def get_audit_logs():
+    try:
+        # Get query parameters
+        limit = request.args.get('limit', 10, type=int)
+        product_id = request.args.get('product_id', type=int)
+        action_type = request.args.get('action_type')
+        days = request.args.get('days', type=int)
+        
+        # Start with a base query
+        query = AuditLog.query
+        
+        # Apply filters
+        if product_id:
+            query = query.filter(AuditLog.product_id == product_id)
+        
+        if action_type:
+            query = query.filter(AuditLog.action_type == action_type)
+        
+        if days:
+            cutoff_date = datetime.now() - timedelta(days=days)
+            query = query.filter(AuditLog.timestamp >= cutoff_date)
+        
+        # Order by timestamp descending (newest first)
+        query = query.order_by(AuditLog.timestamp.desc())
+        
+        # Apply limit
+        query = query.limit(limit)
+        
+        # Execute query and get logs
+        logs = query.all()
+        
+        # Convert to list of dictionaries with formatted date and time
+        result = []
+        for log in logs:
+            log_dict = log.to_dict()
+            # Add formatted date and time fields for frontend
+            if log.timestamp:
+                log_dict['date'] = log.timestamp.strftime('%Y-%m-%d')
+                log_dict['time'] = log.timestamp.strftime('%H:%M:%S')
+            result.append(log_dict)
+        
+        return jsonify(result), 200
+    
+    except Exception as e:
+        print(f"Error in get_audit_logs: {str(e)}")
         return jsonify({'error': str(e)}), 500
