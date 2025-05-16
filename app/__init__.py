@@ -27,12 +27,24 @@ app.config['SESSION_COOKIE_NAME'] = 'kibs_session'
 
 app.config['SESSION_COOKIE_NAME'] = 'kibs_session'
 
-CORS(app, 
-     supports_credentials=True,
-     resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"]}},
-     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
-     expose_headers=["Access-Control-Allow-Origin"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+
+CORS(
+    app,
+    supports_credentials=True,
+    resources={
+        r"/*": {
+            "origins": [
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "https://your-production-domain.com"  # Add your production URL here
+            ]
+        }
+    },
+    allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+    expose_headers=["Access-Control-Allow-Origin"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
 
 @app.before_request
 def handle_options():
