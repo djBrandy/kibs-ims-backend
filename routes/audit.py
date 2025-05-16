@@ -211,6 +211,122 @@ def get_audit_logs():
         print(f"Traceback: {error_details}")
         return jsonify({'error': str(e)}), 500
         
+@audit_bp.route('/logs/pdf', methods=['GET'])
+@login_required
+def get_audit_logs_pdf():
+    """Generate PDF of audit logs"""
+    try:
+        from flask import send_file
+        import tempfile
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib import colors
+        
+        # Get query parameters
+        product_id = request.args.get('product_id', type=int)
+        action_type = request.args.get('action_type')
+        days = request.args.get('days', type=int)
+        
+        # Start with a base query
+        query = AuditLog.query.join(Product, AuditLog.product_id == Product.id)
+        
+        # Apply filters
+        if product_id:
+            query = query.filter(AuditLog.product_id == product_id)
+        
+        if action_type:
+            query = query.filter(AuditLog.action_type == action_type)
+        
+        if days:
+            cutoff_date = datetime.now() - timedelta(days=days)
+            query = query.filter(AuditLog.timestamp >= cutoff_date)
+        
+        # Order by timestamp descending (newest first)
+        query = query.order_by(AuditLog.timestamp.desc())
+        
+        # Execute query
+        logs = query.all()
+        
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            pdf_path = temp_file.name
+        
+        # Create PDF document
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Add title
+        title = Paragraph("Audit Logs Report", styles['Heading1'])
+        elements.append(title)
+        elements.append(Spacer(1, 20))
+        
+        # Add date
+        date_text = Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal'])
+        elements.append(date_text)
+        elements.append(Spacer(1, 20))
+        
+        # Create table data
+        data = [['Product', 'Action', 'Previous Value', 'New Value', 'Date', 'Time', 'Notes']]
+        
+        for log in logs:
+            timestamp = log.timestamp
+            date_str = timestamp.strftime('%Y-%m-%d')
+            time_str = timestamp.strftime('%H:%M:%S')
+            
+            action_type = log.action_type.replace('_', ' ').title()
+            
+            data.append([
+                log.product.product_name,
+                action_type,
+                log.previous_value or 'N/A',
+                log.new_value or 'N/A',
+                date_str,
+                time_str,
+                log.notes or 'N/A'
+            ])
+        
+        # Create table
+        table = Table(data)
+        
+        # Style the table
+        table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('WORDWRAP', (0, 1), (-1, -1), True),
+        ])
+        table.setStyle(table_style)
+        
+        # Add table to elements
+        elements.append(table)
+        
+        # Build PDF
+        doc.build(elements)
+        
+        # Return the PDF file
+        return send_file(
+            pdf_path,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'audit_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+    
+    except Exception as e:
+        error_details = traceback.format_exc()
+        print(f"Error generating PDF: {str(e)}")
+        print(f"Traceback: {error_details}")
+        return jsonify({'error': str(e)}), 500
+        
 @audit_bp.route('/logs/product/<int:product_id>', methods=['GET'])
 @login_required
 def get_product_audit_logs(product_id):

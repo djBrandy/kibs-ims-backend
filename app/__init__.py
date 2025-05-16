@@ -11,26 +11,23 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Disable strict slashes to prevent redirect issues with trailing slashes
 app.url_map.strict_slashes = False
 
-# Set a secret key for sessions
 app.secret_key = os.environ.get('SECRET_KEY', 'kibs-ims-secret-key')
-# Configure session to use cookies
+
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_SECURE'] = True  
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Changed from 'Lax' to 'None' for cross-site requests
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  
 app.config['SESSION_COOKIE_PATH'] = '/'
-app.config['SESSION_COOKIE_DOMAIN'] = None  # Allow all domains
-app.config['SESSION_COOKIE_NAME'] = 'kibs_session'  # Custom session name
+app.config['SESSION_COOKIE_DOMAIN'] = None  
+app.config['SESSION_COOKIE_NAME'] = 'kibs_session'  
 
-# Fix for Flask sessions with React
+
 app.config['SESSION_COOKIE_NAME'] = 'kibs_session'
 
-# Enhanced CORS configuration with credentials support
 CORS(app, 
      supports_credentials=True,
      resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"]}},
@@ -38,7 +35,6 @@ CORS(app,
      expose_headers=["Access-Control-Allow-Origin"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-# Add a before_request handler to handle OPTIONS requests
 @app.before_request
 def handle_options():
     if request.method == "OPTIONS":
@@ -51,7 +47,6 @@ def handle_options():
         }
         return '', 204, headers
 
-# Add CORS headers to all responses
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin')
@@ -61,17 +56,16 @@ def add_cors_headers(response):
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
     
-    # Ensure cookies are being set properly
     if 'Set-Cookie' in response.headers:
         print(f"Setting cookie: {response.headers['Set-Cookie']}")
     
     return response
 
-# Check session timeout before each request
+
+# PROPERLY CONFIGURE THIS LATER FOR PRODUCTION, BEFORE DEPLOYMENT AND AFTER COMPLETION OF EVERYTHING ELSE.
 @app.before_request
 def check_session_timeout():
-    # TEMPORARY: Skip authentication check for development
-    # REMOVE THIS IN PRODUCTION
+    
     return None
     
     # Original authentication code (commented out for now)
@@ -131,7 +125,7 @@ class Product(db.Model):
     product_images = db.Column(db.LargeBinary, nullable=True)
     date_of_entry = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    # Relationship with purchases
+    # relationship with purchases
     purchases = db.relationship('Purchase', backref='product', lazy=True)
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
 
@@ -193,7 +187,7 @@ class AlertNotification(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    alert_type = db.Column(db.String(50), nullable=False)  # 'low_stock' or 'expiration'
+    alert_type = db.Column(db.String(50), nullable=False)  
     last_notified = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     resolved = db.Column(db.Boolean, default=False, nullable=False)
     
@@ -213,13 +207,13 @@ class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     user_id = db.Column(db.Integer, nullable=True)  
-    action_type = db.Column(db.String(50), nullable=False)  # 'quantity_update', 'concentration_update', etc.
+    action_type = db.Column(db.String(50), nullable=False)  
     previous_value = db.Column(db.String(255), nullable=True)
     new_value = db.Column(db.String(255), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    # Relationship with product
+    # relationship with product
     product = db.relationship('Product', backref='audit_logs', lazy=True)
     
     def to_dict(self):
@@ -247,11 +241,11 @@ class InventoryAnalytics(db.Model):
     is_dead_stock = db.Column(db.Boolean, default=False)
     is_slow_moving = db.Column(db.Boolean, default=False)
     is_top_product = db.Column(db.Boolean, default=False)
-    movement_rank = db.Column(db.Integer, nullable=True)  # Lower is faster moving
-    revenue_rank = db.Column(db.Integer, nullable=True)   # Lower is higher revenue
+    movement_rank = db.Column(db.Integer, nullable=True)  
+    revenue_rank = db.Column(db.Integer, nullable=True)   
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationship with product
+
+    # relationship with product
     product = db.relationship('Product', backref='analytics', lazy=True)
     
     def to_dict(self):
@@ -278,7 +272,7 @@ class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     
-    # Relationship with products - using the string category field as foreign key
+    # relationship with products - using the string category field as foreign key
     products = db.relationship('Product', 
                               primaryjoin="Category.name==Product.category",
                               backref='category_rel', 
@@ -294,8 +288,8 @@ class Order(db.Model):
     customer_email = db.Column(db.String(255), nullable=False)
     order_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     status = db.Column(db.String(50), default='pending', nullable=False)
-    
-    # Relationship with order items
+
+    # relationship with order items
     items = db.relationship('OrderItem', backref='order', lazy=True)
 
 
@@ -306,9 +300,9 @@ class OrderItem(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=True)  # Price at time of order
+    price = db.Column(db.Float, nullable=True) 
 
 
-# Import and register blueprints
+# import and register blueprints
 from routes import register_blueprints
 register_blueprints(app)
