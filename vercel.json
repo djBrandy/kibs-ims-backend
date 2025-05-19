@@ -2,27 +2,19 @@
   "version": 3,
   "builds": [
     {
-      "src": "app/__init__.py",
+      "src": "app.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "frontend/build" }
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "app/__init__.py"
-    },
-    {
       "src": "/(.*)",
-      "dest": "frontend/build/$1"
+      "dest": "app.py"
     }
   ],
   "env": {
-    "SECRET_KEY": "@secret_key",
-    "DATABASE_URL": "@database_url"
+    "DATABASE_URL": "mysql+pymysql://root:#Lerengesu.156@localhost/ims_kibs",
+    "SECRET_KEY": "kibs-ims-secret-key",
+    "DEBUG": "True"
   }
 }
