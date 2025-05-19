@@ -1,7 +1,13 @@
 {
   "version": 2,
   "builds": [
-    { "src": "app/__init__.py", "use": "@vercel/python" }
+    {
+      "src": "app/__init__.py",
+      "use": "@vercel/python",
+      "config": {
+        "installCommand": "apt-get update && apt-get install -y libfreetype6-dev libjpeg-dev && pip install -r requirements.txt"
+      }
+    }
   ],
   "routes": [
     { "src": "/(.*)", "dest": "app/__init__.py" }
