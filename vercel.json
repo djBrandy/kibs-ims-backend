@@ -1,15 +1,28 @@
 {
-  "version": 2,
+  "version": 3,
   "builds": [
     {
       "src": "app/__init__.py",
-      "use": "@vercel/python",
-      "config": {
-        "installCommand": "apt-get update && apt-get install -y libfreetype6-dev libjpeg-dev && pip install -r requirements.txt"
-      }
+      "use": "@vercel/python"
+    },
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "frontend/build" }
     }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "app/__init__.py" }
-  ]
+    {
+      "src": "/api/(.*)",
+      "dest": "app/__init__.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend/build/$1"
+    }
+  ],
+  "env": {
+    "SECRET_KEY": "@secret_key",
+    "DATABASE_URL": "@database_url"
+  }
 }
