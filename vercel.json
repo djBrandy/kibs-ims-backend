@@ -1,16 +1,10 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python"
-    }
+    { "src": "app/__init__.py", "use": "@vercel/python" }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "app.py"
-    }
+    { "src": "/(.*)", "dest": "app/__init__.py" }
   ],
   "env": {
     "DATABASE_URL": "mysql+pymysql://root:#Lerengesu.156@localhost/ims_kibs",
