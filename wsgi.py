@@ -1,6 +1,6 @@
 from app import app, db
-from flask_migrate import Migrate
-from flask.cli import FlaskGroup
+from flask_migrate import Migrate # type: ignore
+from flask.cli import FlaskGroup # type: ignore
 
 migrate = Migrate(app, db)
 

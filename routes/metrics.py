@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request # type: ignore
 from app import db
-from app import Product, Purchase, Supplier, AuditLog
-from sqlalchemy import func, desc
+from app.models import Product, Purchase, Supplier, AuditLog # Import models from models.py
+from sqlalchemy import func, desc # type: ignore
 from datetime import datetime, timedelta
 from routes.auth import login_required
 import json

@@ -7,8 +7,9 @@
     { "src": "/(.*)", "dest": "app/__init__.py" }
   ],
   "env": {
-    "DATABASE_URL": "mysql+pymysql://root:#Lerengesu.156@localhost/ims_kibs",
+    "DATABASE_URL": "mysql+pymysql://if0_39022279:fYaMgIlsslzW@sql213.infinityfree.com/if0_39022279_imskibs",
     "SECRET_KEY": "kibs-ims-secret-key",
-    "DEBUG": "True"
+    "DEBUG": "False"
   }
 }
+

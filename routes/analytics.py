@@ -1,8 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request # type: ignore
 from app import db, Product, Purchase
 from datetime import datetime, timedelta
 from routes.auth import login_required
-from sqlalchemy import func, desc, case
+from sqlalchemy import func, desc, case # type: ignore
 import traceback
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
@@ -12,7 +12,7 @@ analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 def update_analytics():
     try:
         from app import InventoryAnalytics, AuditLog, Product
-        from sqlalchemy import func
+        from sqlalchemy import func # type: ignore
         
         products = Product.query.all()
         

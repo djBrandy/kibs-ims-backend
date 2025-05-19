@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
-from app import db, Product, Purchase, AlertNotification, Supplier
-from datetime import datetime, timedelta
+from app import db # Keep db
+from app.models import Product, Purchase, AlertNotification, Supplier # Import models from models.py
 from routes.auth import login_required
 import traceback
 from sqlalchemy import desc
@@ -11,7 +11,7 @@ alerts_bp = Blueprint('alerts', __name__, url_prefix='/api/alerts')
 @login_required
 def get_alerts():
     try:
-
+        from datetime import datetime, timedelta # Import datetime and timedelta here
         today = datetime.now().date()
         expiration_threshold = today + timedelta(days=3)
         
@@ -33,7 +33,7 @@ def get_alerts():
             Product.checkbox_expiry_date == True
         ).all()
         
-        print(f"Found {len(expiring_products)} products near expiration")
+        # print(f"Found {len(expiring_products)} products near expiration")
         
         
         alerts = []
@@ -93,13 +93,13 @@ def get_alerts():
                 'last_purchase_date': last_purchase_date.isoformat() if last_purchase_date else None
             })
         
-        print(f"Returning {len(alerts)} total alerts")
+        # print(f"Returning {len(alerts)} total alerts")
         return jsonify(alerts), 200
     
     except Exception as e:
         error_details = traceback.format_exc()
-        print(f"Error in get_alerts: {str(e)}")
-        print(f"Traceback: {error_details}")
+        # print(f"Error in get_alerts: {str(e)}")
+        # print(f"Traceback: {error_details}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -123,8 +123,8 @@ def send_notifications():
         expiring_products = Product.query.filter(
             Product.expiration_date.isnot(None),
             Product.expiration_date <= expiration_threshold,
-            Product.expiration_date >= today,  # Only include products that haven't expired yet
-            Product.checkbox_expiry_date == True  # Only include products that have expiry date checkbox checked
+            Product.expiration_date >= today,  
+            Product.checkbox_expiry_date == True  
         ).all()
         
         notifications_sent = 0

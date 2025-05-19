@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, redirect
+from flask import Blueprint, request, jsonify, session, redirect # type: ignore
 from datetime import datetime, timedelta
 import os
 from functools import wraps
@@ -6,6 +6,9 @@ from functools import wraps
 auth_bp = Blueprint('auth', __name__)
 
 INVENTORY_ACCESS_CODE = "247815693"
+
+
+# set up flask mail first...
 SUPPORT_EMAIL = "dandobrandon0@gmail.com"
 
 SESSION_TIMEOUT = 15 * 60
@@ -26,8 +29,8 @@ def login():
     
     access_code_str = str(access_code).strip()
     
-    print(f"Comparing: '{access_code_str}' == '{INVENTORY_ACCESS_CODE}'")
-    print(f"Result: {access_code_str == INVENTORY_ACCESS_CODE}")
+    # print(f"Comparing: '{access_code_str}' == '{INVENTORY_ACCESS_CODE}'")
+    # print(f"Result: {access_code_str == INVENTORY_ACCESS_CODE}")
     
     if access_code_str == INVENTORY_ACCESS_CODE:
         session.clear()
@@ -35,8 +38,8 @@ def login():
         session['user_id'] = 1
         session['last_activity'] = datetime.now().timestamp()
         
-        print(f"Session after login: {session}")
-        print(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No SID'}")
+        # print(f"Session after login: {session}")
+        # print(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No SID'}")
         
         response = jsonify({
             'success': True,

@@ -1,4 +1,5 @@
-from app import db, Product, Purchase, Supplier, AlertNotification
+from app import db # Keep db
+from app.models import Product, Purchase, Supplier, AlertNotification # Import models from models.py
 from datetime import datetime, timedelta
 import random
 

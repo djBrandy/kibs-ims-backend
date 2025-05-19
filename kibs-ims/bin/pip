@@ -1,4 +1,4 @@
-#!/mnt/c/Users/dando/Desktop/KIBS/ims-kibs-backend/kibs-ims/bin/python3
+#!/mnt/c/Users/dando/Desktop/KIBS/ims-kibs-backend/kibs-ims/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

@@ -1,5 +1,5 @@
 from app import create_app, db
-from app.models import Product, Category, Order, OrderItem
+from app.models import Product, Category, Order, OrderItem # Import models from models.py
 from faker import Faker
 import random
 

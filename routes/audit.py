@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify
-from flask import session
-from app import db, Product, AuditLog
+from flask import Blueprint, request, jsonify # type: ignore
+from flask import session # type: ignore
+from app import db # Keep db
+from app.models import Product, AuditLog # Import models from models.py
 from datetime import datetime, timedelta
 from routes.auth import login_required
 import traceback
@@ -177,12 +178,12 @@ def get_audit_logs():
 def get_audit_logs_pdf():
     """Generate PDF of audit logs"""
     try:
-        from flask import send_file
+        from flask import send_file # type: ignore
         import tempfile
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter # type: ignore
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer # type: ignore
+        from reportlab.lib.styles import getSampleStyleSheet # type: ignore
+        from reportlab.lib import colors # type: ignore
         
         product_id = request.args.get('product_id', type=int)
         action_type = request.args.get('action_type')
