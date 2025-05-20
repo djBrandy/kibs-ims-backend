@@ -1,9 +1,9 @@
-from flask import Blueprint, jsonify
-from app import db # Keep db
-from app.models import Product, Purchase, AlertNotification, Supplier # Import models from models.py
+from flask import Blueprint, jsonify # type: ignore
+from app import db 
+from app.models import Product, Purchase, AlertNotification, Supplier 
 from routes.auth import login_required
 import traceback
-from sqlalchemy import desc
+from sqlalchemy import desc # type: ignore
 
 alerts_bp = Blueprint('alerts', __name__, url_prefix='/api/alerts')
 
@@ -11,7 +11,7 @@ alerts_bp = Blueprint('alerts', __name__, url_prefix='/api/alerts')
 @login_required
 def get_alerts():
     try:
-        from datetime import datetime, timedelta # Import datetime and timedelta here
+        from datetime import datetime, timedelta 
         today = datetime.now().date()
         expiration_threshold = today + timedelta(days=3)
         
@@ -25,7 +25,8 @@ def get_alerts():
         
         print(f"Found {len(low_stock_products)} products with low stock")
         
-        # Get products near expiration
+        
+
         expiring_products = Product.query.filter(
             Product.expiration_date.isnot(None),
             Product.expiration_date <= expiration_threshold,
@@ -33,14 +34,15 @@ def get_alerts():
             Product.checkbox_expiry_date == True
         ).all()
         
-        # print(f"Found {len(expiring_products)} products near expiration")
-        
+       
         
         alerts = []
         
-        # Process low stock alerts
+       
         for product in low_stock_products:
-            # Get the latest purchase for this product
+            
+            
+            
             latest_purchase = Purchase.query.filter_by(product_id=product.id).order_by(desc(Purchase.purchase_date)).first()
             
             supplier_name = None
@@ -65,9 +67,10 @@ def get_alerts():
                 'last_purchase_date': last_purchase_date.isoformat() if last_purchase_date else None
             })
         
-        # Process expiration alerts
+        
+
         for product in expiring_products:
-            # Get the latest purchase for this product
+            
             latest_purchase = Purchase.query.filter_by(product_id=product.id).order_by(desc(Purchase.purchase_date)).first()
             
             supplier_name = None
@@ -93,13 +96,13 @@ def get_alerts():
                 'last_purchase_date': last_purchase_date.isoformat() if last_purchase_date else None
             })
         
-        # print(f"Returning {len(alerts)} total alerts")
+        
         return jsonify(alerts), 200
     
     except Exception as e:
         error_details = traceback.format_exc()
-        # print(f"Error in get_alerts: {str(e)}")
-        # print(f"Traceback: {error_details}")
+        
+        
         return jsonify({'error': str(e)}), 500
 
 
@@ -107,19 +110,22 @@ def get_alerts():
 @login_required
 def send_notifications():
     try:
-        # Get current date and time
+        
+        from datetime import datetime, timedelta
         now = datetime.now()
         six_hours_ago = now - timedelta(hours=6)
         today = now.date()
         expiration_threshold = today + timedelta(days=3)
         
-        # Get products with low stock
+        
         low_stock_products = Product.query.filter(
             Product.quantity <= Product.low_stock_alert,
-            Product.quantity > 0  # Only include products that are not out of stock
+            Product.quantity > 0  
+            
         ).all()
         
-        # Get products near expiration
+        
+
         expiring_products = Product.query.filter(
             Product.expiration_date.isnot(None),
             Product.expiration_date <= expiration_threshold,
@@ -129,21 +135,27 @@ def send_notifications():
         
         notifications_sent = 0
         
-        # Process low stock alerts
+        
         for product in low_stock_products:
-            # Check if we've already sent a notification in the last 6 hours
+            
+            
             alert = AlertNotification.query.filter_by(
                 product_id=product.id,
                 alert_type='low_stock',
                 resolved=False
             ).first()
             
+
+
+            # FUNCTION TO SEND THE SMS
+            # Check if we've already sent a notification in the last 6 hours
             if not alert or alert.last_notified < six_hours_ago:
-                # Send SMS notification
+                
+                
                 message = f"LOW STOCK ALERT: {product.product_name} is running low. Current quantity: {product.quantity} {product.unit_of_measure}. Threshold: {product.low_stock_alert} {product.unit_of_measure}."
                 send_sms("+254112607179", message)
                 
-                # Update or create notification record
+                
                 if alert:
                     alert.last_notified = now
                 else:
@@ -156,9 +168,12 @@ def send_notifications():
                 
                 notifications_sent += 1
         
-        # Process expiration alerts
+
+        
+        
         for product in expiring_products:
-            # Check if we've already sent a notification in the last 6 hours
+            
+            
             alert = AlertNotification.query.filter_by(
                 product_id=product.id,
                 alert_type='expiration',
@@ -168,11 +183,11 @@ def send_notifications():
             if not alert or alert.last_notified < six_hours_ago:
                 days_until_expiry = (product.expiration_date - today).days
                 
-                # Send SMS notification
+                
                 message = f"EXPIRATION ALERT: {product.product_name} will expire in {days_until_expiry} days (on {product.expiration_date.isoformat()})."
                 send_sms("+254112607179", message)
                 
-                # Update or create notification record
+                
                 if alert:
                     alert.last_notified = now
                 else:
@@ -200,6 +215,8 @@ def send_notifications():
         return jsonify({'error': str(e)}), 500
 
 
+
+# CONTINUED FUNCTION TO SEND SMS
 def send_sms(phone_number, message):
     """
     Send SMS using Africa's Talking API

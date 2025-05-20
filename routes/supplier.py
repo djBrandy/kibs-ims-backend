@@ -1,7 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify # type: ignore
 from app import db, Supplier
 from datetime import datetime
-from flask_cors import cross_origin
+from flask_cors import cross_origin # type: ignore
 from routes.auth import login_required
 
 supplier_bp = Blueprint('supplier', __name__, url_prefix='/api/suppliers')

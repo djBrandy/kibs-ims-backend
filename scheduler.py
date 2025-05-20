@@ -1,6 +1,6 @@
-import requests
+import requests # type: ignore
 import time
-import schedule
+import schedule # type: ignore
 import logging
 from datetime import datetime
 
@@ -35,15 +35,16 @@ def run_scheduler():
     """Run the scheduler to send notifications every 6 hours"""
     logger.info("Starting notification scheduler...")
     
-    # Schedule the notification job to run every 6 hours
+    
     schedule.every(6).hours.do(send_notifications)
     
-    # Also run once at startup
+    
     send_notifications()
     
     while True:
         schedule.run_pending()
-        time.sleep(60)  # Check every minute
+        time.sleep(60) 
+        
 
 if __name__ == "__main__":
     run_scheduler()

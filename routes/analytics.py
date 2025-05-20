@@ -40,7 +40,7 @@ def update_analytics():
             analytics = InventoryAnalytics.query.filter_by(product_id=product.id).first()
             
             if analytics:
-                # Update existing record
+                
                 analytics.last_movement_date = last_movement_date
                 analytics.days_without_movement = days_without_movement
                 analytics.stockout_count = stockout_count

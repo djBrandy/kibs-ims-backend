@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify # type: ignore
 from datetime import datetime
 from app import db
 from app import Product
@@ -26,9 +26,11 @@ def get_all_products():
         if product_type:
             query = query.filter(Product.product_type == product_type)
         if low_stock is not None:
-            if low_stock:  # True means return only low-stock products
+            if low_stock:  
+                
                 query = query.filter(Product.quantity <= Product.low_stock_alert)
-            else:  # False means return products above low stock threshold
+            else:  
+                
                 query = query.filter(Product.quantity > Product.low_stock_alert)
 
         products = query.all()
@@ -77,7 +79,7 @@ def get_all_products():
             } for product in products]), 200
 
     except Exception as e:
-        print(f"Error fetching products: {str(e)}")
+        # print(f"Error fetching products: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -115,7 +117,7 @@ def get_product(product_id):
         }), 200
 
     except Exception as e:
-        print(f"Error getting product {product_id}: {str(e)}")
+        # print(f"Error getting product {product_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
 
@@ -221,8 +223,8 @@ def create_product():
         except Exception as e:
              db.session.rollback()
              error_details = traceback.format_exc()
-             print(f"Error during product object creation: {str(e)}")
-             print(f"Traceback: {error_details}")
+            #  print(f"Error during product object creation: {str(e)}")
+            #  print(f"Traceback: {error_details}")
              return jsonify({'error': f'Server error during product creation: {str(e)}'}), 500
 
         db.session.add(product)
@@ -233,8 +235,8 @@ def create_product():
     except Exception as e:
         db.session.rollback()
         error_details = traceback.format_exc()
-        print(f"Error creating product: {str(e)}")
-        print(f"Traceback: {error_details}")
+        # print(f"Error creating product: {str(e)}")
+        # print(f"Traceback: {error_details}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
     
 
@@ -293,7 +295,7 @@ def update_product(product_id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error updating product {product_id}: {str(e)}")
+        # print(f"Error updating product {product_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -301,7 +303,7 @@ def update_product(product_id):
 @login_required
 def delete_product(product_id):
     try:
-        print(f"Attempting to delete product with ID: {product_id}")
+        # print(f"Attempting to delete product with ID: {product_id}")
         
         db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product_id}")
         db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product_id}")
@@ -316,5 +318,5 @@ def delete_product(product_id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error deleting product: {str(e)}")
+        # print(f"Error deleting product: {str(e)}")
         return jsonify({'error': str(e)}), 500

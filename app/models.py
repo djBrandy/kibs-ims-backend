@@ -103,7 +103,7 @@ class AlertNotification(db.Model):
             'resolved': self.resolved
         }
 
-# Keep AuditLog and InventoryAnalytics as they were already there
+
 class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
     

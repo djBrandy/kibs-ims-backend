@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify # type: ignore
 from flask import session # type: ignore
 from app import db # Keep db
-from app.models import Product, AuditLog # Import models from models.py
+from app.models import Product, AuditLog 
 from datetime import datetime, timedelta
 from routes.auth import login_required
 import traceback
@@ -212,7 +212,7 @@ def get_audit_logs_pdf():
         elements.append(title)
         elements.append(Spacer(1, 20))
         
-        # Add date
+        
         date_text = Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal'])
         elements.append(date_text)
         elements.append(Spacer(1, 20))

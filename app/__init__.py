@@ -5,19 +5,21 @@ from flask_cors import CORS # type: ignore
 import os
 from datetime import datetime, timedelta
 
-# Configuration should be imported before creating the app instance if it's used by app creation.
-from .config import Config # Changed to relative import
+
+from .config import Config 
+
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Initialize SQLAlchemy and Migrate AFTER app is created and configured,
-# but BEFORE models are imported.
+
+
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-# Now import models (they need 'db' from above)
-from .models import Product, Supplier, Purchase, AlertNotification, AuditLog, InventoryAnalytics, Category, Order, OrderItem # Changed to relative import
+
+
+from .models import Product, Supplier, Purchase, AlertNotification, AuditLog, InventoryAnalytics, Category, Order, OrderItem 
 
 app.url_map.strict_slashes = False
 
@@ -46,7 +48,7 @@ CORS(
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
-                "https://kibs-ims.netlify.app/"  # Add your production URL here
+                "https://kibs-ims.netlify.app/" 
             ]
         }
     },
@@ -87,13 +89,15 @@ def check_session_timeout():
     
     return None
 
-# Route to serve the service worker from the root
+
 @app.route('/service-worker.js')
 def sw():
-    # By default, app.static_folder is 'static' relative to app.root_path (i.e., 'app/static/')
+    
+
     return app.send_static_file('service-worker.js')
 
 
-# Blueprints
-from routes import register_blueprints # Use absolute import for sibling package
+
+
+from routes import register_blueprints 
 register_blueprints(app)

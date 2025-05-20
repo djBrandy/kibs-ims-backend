@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request # type: ignore
 from app import db
-from app.models import Product, Purchase, Supplier, AuditLog # Import models from models.py
+from app.models import Product, Purchase, Supplier, AuditLog 
+
 from sqlalchemy import func, desc # type: ignore
 from datetime import datetime, timedelta
 from routes.auth import login_required
@@ -110,7 +111,7 @@ def get_performance_metrics():
         }), 200
         
     except Exception as e:
-        print(f"Error in get_performance_metrics: {str(e)}")
+        # print(f"Error in get_performance_metrics: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @metrics_bp.route('/chart/<metric_type>', methods=['GET'])
@@ -163,9 +164,11 @@ def get_metric_chart_data(metric_type):
                     variation = 2000 * (0.5 + (i / periods))
                     data.append(base_value + variation)
                 elif metric_type == 'inventoryTurnover':
-                    data.append(3.0 + (i * 0.05))  # Gradually increasing turnover
+                    data.append(3.0 + (i * 0.05)) 
+                    
                 elif metric_type == 'newProducts':
-                    data.append(2 if i % 4 == 0 else 0)  # New products added periodically
+                    data.append(2 if i % 4 == 0 else 0)  
+                    
                 elif metric_type == 'supplierCount':
                     data.append(20 + (1 if i % 10 == 0 and i > 0 else 0))
                 elif metric_type == 'avgOrderValue':
@@ -183,7 +186,7 @@ def get_metric_chart_data(metric_type):
         }), 200
         
     except Exception as e:
-        print(f"Error in get_metric_chart_data: {str(e)}")
+        # print(f"Error in get_metric_chart_data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @metrics_bp.route('/audit-logs', methods=['GET'])
@@ -220,5 +223,5 @@ def get_audit_logs():
         return jsonify(result), 200
     
     except Exception as e:
-        print(f"Error in get_audit_logs: {str(e)}")
+        # print(f"Error in get_audit_logs: {str(e)}")
         return jsonify({'error': str(e)}), 500
