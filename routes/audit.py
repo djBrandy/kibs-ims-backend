@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify # type: ignore
 from flask import session # type: ignore
 from app import db # Keep db
-from app.models import Product, AuditLog 
+from app.models import Product, AuditLog, Worker 
 from datetime import datetime, timedelta
 from routes.auth import login_required
 import traceback
@@ -280,7 +280,26 @@ def get_product_audit_logs(product_id):
                             .limit(limit) \
                             .all()
         
-        logs_data = [log.to_dict() for log in logs]
+        logs_data = []
+        for log in logs:
+            log_dict = log.to_dict() if hasattr(log, "to_dict") else {
+                "id": log.id,
+                "timestamp": log.timestamp,
+                "action_type": log.action_type,
+                "previous_value": log.previous_value,
+                "new_value": log.new_value,
+                "notes": log.notes,
+                "user_id": log.user_id,
+            }
+            # Fetch worker username if user_id is present
+            worker_username = None
+            if log.user_id:
+                worker = Worker.query.get(log.user_id)
+                if worker:
+                    worker_username = worker.username
+            log_dict["worker_username"] = worker_username
+            logs_data.append(log_dict)
+
         return jsonify({
             'product': {
                 'id': product.id,

@@ -1,5 +1,9 @@
 from app import db
+# from flask_sqlalchemy import SQLAlchemy # type: ignore
+from werkzeug.security import generate_password_hash, check_password_hash # type: ignore
 from datetime import datetime
+
+
 
 class Product(db.Model):
     __tablename__ = 'products'
@@ -198,4 +202,53 @@ class OrderItem(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=True) 
+    price = db.Column(db.Float, nullable=True)
+
+
+class Admin(db.Model):
+    __tablename__ = 'admins'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class Worker(db.Model):
+    __tablename__ = 'workers'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=True)
+    password_hash = db.Column(db.String(128), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class PasswordResetCode(db.Model):
+    __tablename__ = 'password_reset_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    user_type = db.Column(db.String(10), nullable=False)  # 'admin' or 'worker'
+    user_id = db.Column(db.Integer, nullable=False)
+    code = db.Column(db.String(8), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+
+class MFACode(db.Model):
+    __tablename__ = 'mfa_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    user_type = db.Column(db.String(10), nullable=False)  # 'admin' or 'worker'
+    user_id = db.Column(db.Integer, nullable=False)
+    code = db.Column(db.String(8), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)

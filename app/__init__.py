@@ -2,6 +2,8 @@ from flask import Flask, request, session, jsonify, redirect # type: ignore
 from flask_sqlalchemy import SQLAlchemy # type: ignore
 from flask_migrate import Migrate # type: ignore
 from flask_cors import CORS # type: ignore
+from flask_limiter import Limiter # type: ignore
+from flask_jwt_extended import JWTManager # type: ignore
 import os
 from datetime import datetime, timedelta
 
@@ -96,8 +98,8 @@ def sw():
 
     return app.send_static_file('service-worker.js')
 
-
-
+# limiter = Limiter(app, key_func=get_remote_address) # type: ignore
+jwt = JWTManager(app)
 
 from routes import register_blueprints 
 register_blueprints(app)
