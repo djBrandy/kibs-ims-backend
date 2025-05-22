@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify # type: ignore
+from flask import Blueprint, request, jsonify, g # type: ignore
 from app import db, Supplier
 from datetime import datetime
 from flask_cors import cross_origin # type: ignore

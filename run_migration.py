@@ -1,13 +1,28 @@
+from flask_migrate import upgrade
+from app import app, db
+from app.models import User
+from werkzeug.security import generate_password_hash
 import os
-import sys
 
-# Add the current directory to the path so we can import the app
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+def run_migrations():
+    with app.app_context():
+        # Run migrations
+        upgrade()
+        
+        # Create admin user if it doesn't exist
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User(
+                username='admin',
+                email='admin@kibs-ims.com',
+                phone='1234567890',
+                role='admin',
+                is_active=True
+            )
+            admin.password_hash = generate_password_hash('admin')
+            db.session.add(admin)
+            db.session.commit()
+            print("Admin user created")
 
-# Import the migration script
-from add_hidden_column import add_hidden_column
-
-if __name__ == "__main__":
-    print("Running database migration...")
-    add_hidden_column()
-    print("Migration complete. Please restart your Flask application.")
+if __name__ == '__main__':
+    run_migrations()

@@ -3,6 +3,7 @@ from app import db, Product, Purchase
 from datetime import datetime, timedelta
 from routes.auth import login_required
 from sqlalchemy import func, desc, case # type: ignore
+from app.models import AuditLog, InventoryAnalytics
 import traceback
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
@@ -11,7 +12,7 @@ analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 @login_required
 def update_analytics():
     try:
-        from app import InventoryAnalytics, AuditLog, Product
+        # Using already imported models
         from sqlalchemy import func # type: ignore
         
         products = Product.query.all()
@@ -91,7 +92,7 @@ def update_analytics():
 @login_required
 def get_stockout_data():
     try:
-        from app import InventoryAnalytics, Product
+        # Using already imported models
         
         stockout_data = db.session.query(
             InventoryAnalytics, Product
@@ -124,7 +125,7 @@ def get_stockout_data():
 @login_required
 def get_dead_stock():
     try:
-        from app import InventoryAnalytics, Product
+        # Using already imported models
         
         dead_stock = db.session.query(
             InventoryAnalytics, Product
@@ -159,7 +160,7 @@ def get_dead_stock():
 @login_required
 def get_top_products():
     try:
-        from app import InventoryAnalytics, Product
+        # Using already imported models
         
         top_products = db.session.query(
             InventoryAnalytics, Product
@@ -193,7 +194,7 @@ def get_top_products():
 @login_required
 def get_slow_moving():
     try:
-        from app import InventoryAnalytics, Product
+        # Using already imported models
         
         slow_moving = db.session.query(
             InventoryAnalytics, Product

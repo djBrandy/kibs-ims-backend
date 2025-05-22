@@ -6,7 +6,7 @@ import base64
 import random
 from routes.auth import login_required
 import traceback
-from app.models import Product, PendingDelete, AlertNotification, Worker, Admin, db
+from app.models import Product, PendingDelete, AlertNotification, Worker, Admin, AuditLog, db
 from flask_jwt_extended import jwt_required, get_jwt_identity # type: ignore
 
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')

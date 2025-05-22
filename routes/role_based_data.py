@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, session, g
 from app.models import db, Product, Supplier, Worker, AuditLog, InventoryAnalytics, AlertNotification, User
 from routes.auth import login_required, debug_session
 from datetime import datetime, timedelta

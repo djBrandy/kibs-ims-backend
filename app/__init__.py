@@ -110,16 +110,20 @@ def before_request():
     if request.path.startswith('/api/auth/'):
         return None
     
+    # Skip auth check for service worker
+    if request.path == '/service-worker.js':
+        return None
+    
     # Implement proper authentication for production
     if request.path.startswith('/api/'):
         auth_header = request.headers.get('Authorization')
         
         if auth_header and auth_header.startswith('Basic '):
             # Handle Basic Auth
-            from app.models import User
-            import base64
-            
             try:
+                from app.models import User
+                import base64
+                
                 encoded = auth_header.split(' ')[1]
                 decoded = base64.b64decode(encoded).decode('utf-8')
                 username, password = decoded.split(':', 1)
@@ -132,11 +136,20 @@ def before_request():
                 app.logger.error(f"Auth error: {str(e)}")
                 pass
         
-        # Check for session-based auth as fallback
-        from app.models import User
-        admin_user = User.query.filter_by(username='admin').first()
-        if admin_user:
-            g.user = admin_user
+        # For development/testing, bypass auth check
+        try:
+            # Check if users table exists before querying
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            if 'users' in inspector.get_table_names():
+                from app.models import User
+                admin_user = User.query.filter_by(username='admin').first()
+                if admin_user:
+                    g.user = admin_user
+        except Exception as e:
+            app.logger.error(f"Database error: {str(e)}")
+            # Allow request to continue even if users table doesn't exist
+            g.user = None
 
 
 @app.route('/service-worker.js')
