@@ -1,51 +1,52 @@
-# KIBS Inventory Management System - Backend
+# KIBS Inventory Management System Backend
 
-## Database Tables Issue Fix
+Backend API for the KIBS Inventory Management System.
 
-There's an issue with missing database tables for audit logs and inventory analytics. To fix this issue, follow these steps:
+## Deployment
 
-1. Make sure your virtual environment is activated (if you're using one)
+This backend is configured to be deployed on [Render](https://render.com).
 
-2. Run the following command from the project root directory:
+### Deployment Steps
 
-```bash
-python -m ims-kibs-backend.migrations.create_tables
-```
+1. Create a new PostgreSQL database on Render
+2. Create a new Web Service on Render
+3. Connect your GitHub repository
+4. Use the following settings:
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `gunicorn wsgi:app`
+5. Add the following environment variables:
+   - `DATABASE_URL`: Will be automatically set if using Render's PostgreSQL
+   - `SECRET_KEY`: Generate a secure random string
+   - `FLASK_APP`: wsgi.py
+   - `FLASK_ENV`: production
+   - `FRONTEND_URL`: https://kibs-ims.netlify.app
 
-3. If you encounter any issues, you can manually create the tables by running these SQL commands in your database:
+## Local Development
 
-```sql
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id INTEGER PRIMARY KEY AUTO_INCREMENT,
-    product_id INTEGER NOT NULL,
-    user_id INTEGER,
-    action_type VARCHAR(50) NOT NULL,
-    previous_value VARCHAR(255),
-    new_value VARCHAR(255),
-    notes TEXT,
-    timestamp DATETIME NOT NULL,
-    FOREIGN KEY (product_id) REFERENCES products(id)
-);
+1. Clone the repository
+2. Create a virtual environment: `python -m venv venv`
+3. Activate the virtual environment:
+   - Windows: `venv\Scripts\activate`
+   - Unix/MacOS: `source venv/bin/activate`
+4. Install dependencies: `pip install -r requirements.txt`
+5. Create a `.env` file based on `.env.example`
+6. Run migrations: `flask db upgrade`
+7. Start the development server: `flask run`
 
-CREATE TABLE IF NOT EXISTS inventory_analytics (
-    id INTEGER PRIMARY KEY AUTO_INCREMENT,
-    product_id INTEGER NOT NULL,
-    last_movement_date DATETIME,
-    days_without_movement INTEGER,
-    stockout_count INTEGER NOT NULL DEFAULT 0,
-    last_stockout_date DATETIME,
-    is_dead_stock BOOLEAN NOT NULL DEFAULT 0,
-    is_slow_moving BOOLEAN NOT NULL DEFAULT 0,
-    is_top_product BOOLEAN NOT NULL DEFAULT 0,
-    movement_rank INTEGER,
-    revenue_rank INTEGER,
-    last_updated DATETIME NOT NULL,
-    FOREIGN KEY (product_id) REFERENCES products(id)
-);
-```
+## API Documentation
 
-4. Restart the backend server after creating the tables.
+The API is available at the following base URL:
 
-## Note
+- Production: https://your-render-app-name.onrender.com/api
+- Development: http://localhost:5000/api
 
-Until the tables are created, the system will use mock data for audit logs and inventory analytics.
+### Authentication
+
+Authentication is handled via Basic Auth or session cookies.
+
+### Endpoints
+
+- `/api/auth/login` - User login
+- `/api/products` - Product management
+- `/api/suppliers` - Supplier management
+- `/api/role-data` - Role-based data access

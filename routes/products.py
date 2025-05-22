@@ -6,6 +6,8 @@ import base64
 import random
 from routes.auth import login_required
 import traceback
+from app.models import Product, PendingDelete, AlertNotification, Worker, Admin, db
+from flask_jwt_extended import jwt_required, get_jwt_identity # type: ignore
 
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
@@ -14,12 +16,24 @@ product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 @login_required
 def get_all_products():
     try:
+        from flask import g
+        
         category = request.args.get('category')
         product_type = request.args.get('product_type')
         low_stock = request.args.get('low_stock', type=bool)
         detailed = request.args.get('detailed', type=bool, default=False)
 
         query = Product.query
+        
+        # If user is a worker, hide products marked as hidden from workers
+        try:
+            if hasattr(g, 'user') and g.user and g.user.role == 'worker':
+                # Check if hidden_from_workers column exists
+                if hasattr(Product, 'hidden_from_workers'):
+                    query = query.filter(Product.hidden_from_workers == False)
+        except Exception:
+            # If column doesn't exist yet, continue without filtering
+            pass
 
         if category:
             query = query.filter(Product.category == category)
@@ -27,56 +41,46 @@ def get_all_products():
             query = query.filter(Product.product_type == product_type)
         if low_stock is not None:
             if low_stock:  
-                
                 query = query.filter(Product.quantity <= Product.low_stock_alert)
             else:  
-                
                 query = query.filter(Product.quantity > Product.low_stock_alert)
 
         products = query.all()
 
+        from flask import g
+        
+        # Check if user is admin to include QR code
+        is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
+        
         if detailed:
-            return jsonify([{
-                "id": product.id,
-                "product_name": product.product_name,
-                "product_type": product.product_type,
-                "category": product.category,
-                "product_code": product.product_code,
-                "manufacturer": product.manufacturer,
-                "qr_code": product.qr_code,
-                "price_in_kshs": product.price_in_kshs,
-                "quantity": product.quantity,
-                "unit_of_measure": product.unit_of_measure,
-                "concentration": product.concentration,
-                "storage_temperature": product.storage_temperature,
-                "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
-                "hazard_level": product.hazard_level,
-                "protocol_link": product.protocol_link,
-                "msds_link": product.msds_link,
-                "low_stock_alert": product.low_stock_alert,
-                "checkbox_expiry_date": product.checkbox_expiry_date,
-                "checkbox_hazardous_material": product.checkbox_hazardous_material,
-                "checkbox_controlled_substance": product.checkbox_controlled_substance,
-                "checkbox_requires_regular_calibration": product.checkbox_requires_regular_calibration,
-                "special_instructions": product.special_instructions,
-                "product_images": base64.b64encode(product.product_images).decode('utf-8') if product.product_images else None,
-                "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
-            } for product in products]), 200
+            result = []
+            for product in products:
+                product_dict = product.to_dict(include_qr=is_admin)
+                if product.product_images:
+                    product_dict["product_images"] = base64.b64encode(product.product_images).decode('utf-8')
+                result.append(product_dict)
+            return jsonify(result), 200
         else:
-            return jsonify([{
-                "id": product.id,
-                "product_name": product.product_name,
-                "product_code": product.product_code,
-                "qr_code": product.qr_code,
-                "price_in_kshs": product.price_in_kshs,
-                "quantity": product.quantity,
-                "unit_of_measure": product.unit_of_measure,
-                "category": product.category,
-                "product_type": product.product_type,
-                "manufacturer": product.manufacturer,
-                "low_stock_alert": product.low_stock_alert,
-                "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
-            } for product in products]), 200
+            result = []
+            for product in products:
+                product_dict = {
+                    "id": product.id,
+                    "product_name": product.product_name,
+                    "product_code": product.product_code,
+                    "price_in_kshs": product.price_in_kshs,
+                    "quantity": product.quantity,
+                    "unit_of_measure": product.unit_of_measure,
+                    "category": product.category,
+                    "product_type": product.product_type,
+                    "manufacturer": product.manufacturer,
+                    "low_stock_alert": product.low_stock_alert,
+                    "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
+                }
+                # Only include QR code for admin users
+                if is_admin:
+                    product_dict["qr_code"] = product.qr_code
+                result.append(product_dict)
+            return jsonify(result), 200
 
     except Exception as e:
         # print(f"Error fetching products: {str(e)}")
@@ -303,20 +307,208 @@ def update_product(product_id):
 @login_required
 def delete_product(product_id):
     try:
-        # print(f"Attempting to delete product with ID: {product_id}")
+        from flask import g
         
-        db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product_id}")
-        db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product_id}")
-        db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product_id}")
-        db.session.execute(f"DELETE FROM purchases WHERE product_id = {product_id}")
-        db.session.execute(f"DELETE FROM order_items WHERE product_id = {product_id}")
-        db.session.execute(f"DELETE FROM products WHERE id = {product_id}")
+        # Check if user is admin or worker
+        is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
         
-        db.session.commit()
-        
-        return jsonify({'message': 'Product deleted successfully'}), 200
+        if is_admin:
+            # Admin can actually delete the product
+            db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product_id}")
+            db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product_id}")
+            db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product_id}")
+            db.session.execute(f"DELETE FROM purchases WHERE product_id = {product_id}")
+            db.session.execute(f"DELETE FROM order_items WHERE product_id = {product_id}")
+            db.session.execute(f"DELETE FROM products WHERE id = {product_id}")
+            
+            db.session.commit()
+            
+            return jsonify({'message': 'Product deleted successfully'}), 200
+        else:
+            # Worker can only request deletion
+            product = Product.query.get_or_404(product_id)
+            worker = g.user
+            
+            try:
+                # Create a deletion request
+                pending_delete = PendingDelete(
+                    worker_id=worker.id,
+                    product_id=product_id,
+                    status='pending'
+                )
+                db.session.add(pending_delete)
+                
+                # Create an alert for admins
+                alert = AlertNotification(
+                    product_id=product_id,
+                    alert_type='delete_request',
+                    last_notified=datetime.utcnow(),
+                    resolved=False
+                )
+                db.session.add(alert)
+                
+                # Add audit log
+                audit = AuditLog(
+                    product_id=product_id,
+                    user_id=worker.id,
+                    action_type='delete_request',
+                    notes=f"Worker {worker.username} is attempting to delete product {product.product_name}"
+                )
+                db.session.add(audit)
+                
+                # Try to hide product from worker view if column exists
+                try:
+                    if hasattr(product, 'hidden_from_workers'):
+                        product.hidden_from_workers = True
+                except:
+                    pass
+                
+                db.session.commit()
+                
+                return jsonify({'message': 'Delete request sent to admin. Product is now hidden from your view.'}), 200
+            except Exception as e:
+                # Fallback if tables don't exist yet
+                db.session.rollback()
+                
+                # Just add an audit log
+                audit = AuditLog(
+                    product_id=product_id,
+                    user_id=worker.id,
+                    action_type='delete_request',
+                    notes=f"Worker {worker.username} is attempting to delete product {product.product_name}"
+                )
+                db.session.add(audit)
+                db.session.commit()
+                
+                return jsonify({'message': 'Delete request sent to admin.'}), 200
         
     except Exception as e:
         db.session.rollback()
-        # print(f"Error deleting product: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@product_bp.route('/pending-delete-requests', methods=['GET'])
+@login_required
+def get_pending_delete_requests():
+    try:
+        from flask import g
+        
+        # Only admins can see pending delete requests
+        is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
+        if not is_admin:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Get all pending delete requests with product and worker info
+        pending_requests = PendingDelete.query.filter_by(status='pending').all()
+        
+        result = []
+        for request in pending_requests:
+            product = Product.query.get(request.product_id)
+            worker = User.query.get(request.worker_id)
+            
+            if product and worker:
+                result.append({
+                    'id': request.id,
+                    'product_id': request.product_id,
+                    'product_name': product.product_name,
+                    'worker_id': request.worker_id,
+                    'worker_name': worker.username,
+                    'timestamp': request.timestamp.isoformat(),
+                    'status': request.status
+                })
+                
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@product_bp.route('/delete-request/<int:request_id>/approve', methods=['POST'])
+@login_required
+def approve_delete_request(request_id):
+    try:
+        from flask import g
+        
+        # Only admins can approve delete requests
+        is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
+        if not is_admin:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Get the delete request
+        delete_request = PendingDelete.query.get_or_404(request_id)
+        product = Product.query.get(delete_request.product_id)
+        worker = User.query.get(delete_request.worker_id)
+        
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+            
+        # Update request status
+        delete_request.status = 'approved'
+        
+        # Actually delete the product
+        db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product.id}")
+        db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product.id}")
+        db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product.id}")
+        db.session.execute(f"DELETE FROM purchases WHERE product_id = {product.id}")
+        db.session.execute(f"DELETE FROM order_items WHERE product_id = {product.id}")
+        
+        # Add audit log before deleting product
+        audit = AuditLog(
+            product_id=1,  # Use placeholder since product will be deleted
+            user_id=g.user.id,
+            action_type='delete_approved',
+            notes=f"Admin approved deletion of product {product.product_name} requested by {worker.username if worker else 'unknown'}"
+        )
+        db.session.add(audit)
+        
+        # Now delete the product
+        db.session.delete(product)
+        db.session.commit()
+        
+        return jsonify({'message': 'Delete request approved and product deleted'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@product_bp.route('/delete-request/<int:request_id>/reject', methods=['POST'])
+@login_required
+def reject_delete_request(request_id):
+    try:
+        from flask import g
+        
+        # Only admins can reject delete requests
+        is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
+        if not is_admin:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Get the delete request
+        delete_request = PendingDelete.query.get_or_404(request_id)
+        product = Product.query.get(delete_request.product_id)
+        worker = User.query.get(delete_request.worker_id)
+        
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+            
+        # Update request status
+        delete_request.status = 'rejected'
+        
+        # Make product visible to workers again
+        product.hidden_from_workers = False
+        
+        # Add audit log
+        audit = AuditLog(
+            product_id=product.id,
+            user_id=g.user.id,
+            action_type='delete_rejected',
+            notes=f"Admin rejected deletion of product {product.product_name} requested by {worker.username if worker else 'unknown'}"
+        )
+        db.session.add(audit)
+        
+        db.session.commit()
+        
+        return jsonify({'message': 'Delete request rejected and product made visible again'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500

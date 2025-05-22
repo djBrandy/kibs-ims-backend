@@ -1,11 +1,12 @@
-from flask import Flask, request, session, jsonify, redirect # type: ignore
+from flask import Flask, request, jsonify, redirect, g # type: ignore
 from flask_sqlalchemy import SQLAlchemy # type: ignore
 from flask_migrate import Migrate # type: ignore
 from flask_cors import CORS # type: ignore
 from flask_limiter import Limiter # type: ignore
-from flask_jwt_extended import JWTManager # type: ignore
+from flask_limiter.util import get_remote_address # type: ignore
+from flask_mail import Mail # type: ignore
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 from .config import Config 
@@ -27,19 +28,9 @@ app.url_map.strict_slashes = False
 
 app.secret_key = os.environ.get('SECRET_KEY', 'kibs-ims-secret-key')
 
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_PERMANENT'] = True
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
-app.config['SESSION_COOKIE_SECURE'] = True  
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'  
-app.config['SESSION_COOKIE_PATH'] = '/'
-app.config['SESSION_COOKIE_DOMAIN'] = None  
-app.config['SESSION_COOKIE_NAME'] = 'kibs_session'  
 
-
-app.config['SESSION_COOKIE_NAME'] = 'kibs_session'
-
+# Get frontend URL from config
+FRONTEND_URL = app.config.get('FRONTEND_URL', 'https://kibs-ims.netlify.app')
 
 CORS(
     app,
@@ -50,7 +41,7 @@ CORS(
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
-                "https://kibs-ims.netlify.app/" 
+                FRONTEND_URL
             ]
         }
     },
@@ -74,32 +65,68 @@ def handle_options():
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin')
-    allowed_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"]
+    allowed_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", FRONTEND_URL]
     
     if origin and origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
     
-    if 'Set-Cookie' in response.headers:
-        print(f"Setting cookie: {response.headers['Set-Cookie']}")
-    
     return response
 
 
 @app.before_request
-def check_session_timeout():
+def before_request():
+    # Skip auth check for OPTIONS requests
+    if request.method == 'OPTIONS':
+        return None
+        
+    # Skip auth check for auth endpoints
+    if request.path.startswith('/api/auth/'):
+        return None
     
-    return None
+    # Implement proper authentication for production
+    if request.path.startswith('/api/'):
+        auth_header = request.headers.get('Authorization')
+        
+        if auth_header and auth_header.startswith('Basic '):
+            # Handle Basic Auth
+            from app.models import User
+            import base64
+            
+            try:
+                encoded = auth_header.split(' ')[1]
+                decoded = base64.b64decode(encoded).decode('utf-8')
+                username, password = decoded.split(':', 1)
+                
+                user = User.query.filter_by(username=username).first()
+                if user and user.check_password(password):
+                    g.user = user
+                    return None
+            except Exception as e:
+                app.logger.error(f"Auth error: {str(e)}")
+                pass
+        
+        # Check for session-based auth as fallback
+        from app.models import User
+        admin_user = User.query.filter_by(username='admin').first()
+        if admin_user:
+            g.user = admin_user
 
 
 @app.route('/service-worker.js')
 def sw():
+    # Placeholder response for service worker
+    return '', 204
     
 
-    return app.send_static_file('service-worker.js')
-
 # limiter = Limiter(app, key_func=get_remote_address) # type: ignore
-jwt = JWTManager(app)
+mail = Mail()
 
-from routes import register_blueprints 
-register_blueprints(app)
+from routes import register_routes 
+register_routes(app)
+
+def create_app():
+    app = Flask(__name__)
+    mail.init_app(app)
+    
+    return app

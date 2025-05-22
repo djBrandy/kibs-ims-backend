@@ -2,6 +2,8 @@ from app import db
 # from flask_sqlalchemy import SQLAlchemy # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash # type: ignore
 from datetime import datetime
+from itsdangerous import URLSafeTimedSerializer # type: ignore
+from flask import current_app # type: ignore
 
 
 
@@ -33,8 +35,48 @@ class Product(db.Model):
     special_instructions = db.Column(db.Text, nullable=True)
     product_images = db.Column(db.LargeBinary, nullable=True)
     date_of_entry = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    hidden_from_workers = db.Column(db.Boolean, default=False)
     
     purchases = db.relationship('Purchase', backref='product', lazy=True)
+    
+    def to_dict(self, include_qr=True):
+        data = {
+            'id': self.id,
+            'product_name': self.product_name,
+            'product_type': self.product_type,
+            'category': self.category,
+            'product_code': self.product_code,
+            'manufacturer': self.manufacturer,
+            'price_in_kshs': self.price_in_kshs,
+            'quantity': self.quantity,
+            'unit_of_measure': self.unit_of_measure,
+            'concentration': self.concentration,
+            'storage_temperature': self.storage_temperature,
+            'expiration_date': self.expiration_date.isoformat() if self.expiration_date else None,
+            'hazard_level': self.hazard_level,
+            'protocol_link': self.protocol_link,
+            'msds_link': self.msds_link,
+            'low_stock_alert': self.low_stock_alert,
+            'checkbox_expiry_date': self.checkbox_expiry_date,
+            'checkbox_hazardous_material': self.checkbox_hazardous_material,
+            'checkbox_controlled_substance': self.checkbox_controlled_substance,
+            'checkbox_requires_regular_calibration': self.checkbox_requires_regular_calibration,
+            'special_instructions': self.special_instructions,
+            'date_of_entry': self.date_of_entry.isoformat() if self.date_of_entry else None
+        }
+        
+        # Add hidden_from_workers if it exists
+        try:
+            if hasattr(self, 'hidden_from_workers'):
+                data['hidden_from_workers'] = self.hidden_from_workers
+        except:
+            pass
+        
+        # Only include QR code for admin users
+        if include_qr:
+            data['qr_code'] = self.qr_code
+            
+        return data
 
 
 class Supplier(db.Model):
@@ -181,6 +223,12 @@ class Category(db.Model):
                               backref='category_rel', 
                               lazy=True,
                               foreign_keys=[Product.category])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name
+        }
 
 
 class Order(db.Model):
@@ -252,3 +300,62 @@ class MFACode(db.Model):
     code = db.Column(db.String(8), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     used = db.Column(db.Boolean, default=False)
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=True)
+    password_hash = db.Column(db.String(128), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+    last_activity = db.Column(db.DateTime)
+    reset_token = db.Column(db.String(128), nullable=True)
+    role = db.Column(db.String(20), nullable=False, default='worker')
+    permissions = db.Column(db.Text, nullable=True)  # JSON string for custom permissions
+    is_banned = db.Column(db.Boolean, default=False)
+    ban_reason = db.Column(db.Text, nullable=True)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def generate_reset_token(self):
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        return s.dumps({'user_id': self.id})
+
+    @staticmethod
+    def verify_reset_token(token, expiration=3600):
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token, max_age=expiration)
+        except Exception:
+            return None
+        return User.query.get(data['user_id'])
+
+class PendingDelete(db.Model):
+    __tablename__ = 'pending_deletes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    
+    # Relationships
+    worker = db.relationship('User', backref='delete_requests')
+    product = db.relationship('Product', backref='delete_requests')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'worker_id': self.worker_id,
+            'worker_name': self.worker.username if self.worker else 'Unknown',
+            'product_id': self.product_id,
+            'product_name': self.product.product_name if self.product else 'Unknown',
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'status': self.status
+        }
