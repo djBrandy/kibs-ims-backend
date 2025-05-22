@@ -1,9 +1,12 @@
-from app import db
-# from flask_sqlalchemy import SQLAlchemy # type: ignore
+# Import db directly to avoid circular imports
+from flask_sqlalchemy import SQLAlchemy # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash # type: ignore
 from datetime import datetime
 from itsdangerous import URLSafeTimedSerializer # type: ignore
 from flask import current_app # type: ignore
+
+# Get db from the app module
+from app import db
 
 
 

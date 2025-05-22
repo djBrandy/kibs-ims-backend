@@ -48,7 +48,8 @@ migrate = Migrate(app, db)
 
 
 
-from .models import Product, Supplier, Purchase, AlertNotification, AuditLog, InventoryAnalytics, Category, Order, OrderItem 
+# Import models after db is initialized
+from app.models import Product, Supplier, Purchase, AlertNotification, AuditLog, InventoryAnalytics, Category, Order, OrderItem
 
 app.url_map.strict_slashes = False
 

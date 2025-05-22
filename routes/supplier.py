@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, g # type: ignore
-from app import db, Supplier
+from app import db
+from app.models import Supplier
 from datetime import datetime
 from flask_cors import cross_origin # type: ignore
 from routes.auth import login_required
@@ -13,8 +14,11 @@ def get_all_suppliers():
     if request.method == 'OPTIONS':
         return '', 200
     
-    suppliers = Supplier.query.all()
-    return jsonify([supplier.to_dict() for supplier in suppliers]), 200
+    try:
+        suppliers = Supplier.query.all()
+        return jsonify([supplier.to_dict() for supplier in suppliers]), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @supplier_bp.route('/<int:supplier_id>', methods=['GET', 'OPTIONS'])
 @cross_origin()
