@@ -7,13 +7,33 @@ from flask_limiter.util import get_remote_address # type: ignore
 from flask_mail import Mail # type: ignore
 import os
 from datetime import datetime
+from dotenv import load_dotenv # type: ignore
 
+load_dotenv()
 
 # from .config import Config 
 
 
 app = Flask(__name__)
 # app.config.from_object(Config)
+
+
+# Database configuration
+database_url = os.getenv('DATABASE_URL', 'postgresql://kibs_user:Xe9TM4q9axDuN5CFBEffX6H4V9kTdMcr@dpg-d0nidt8dl3ps73aabl0g-a/kibs_ims')
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'kibs-ims-secret-key')
+app.config['DEBUG'] = os.getenv('DEBUG', 'False') == 'True'
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = True
+app.config['SESSION_USE_SIGNER'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 900
+app.config['FRONTEND_URL'] = os.getenv('FRONTEND_URL', 'https://kibs-ims.netlify.app')
+
+
 
 
 
