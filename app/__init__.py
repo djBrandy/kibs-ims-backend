@@ -23,7 +23,13 @@ database_url = os.getenv('DATABASE_URL', 'postgresql://kibs_user:Xe9TM4q9axDuN5C
 if database_url and database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
+# Fix for SQLAlchemy 2.0 compatibility
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_timeout': 900
+}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'kibs-ims-secret-key')
 app.config['DEBUG'] = os.getenv('DEBUG', 'False') == 'True'
@@ -135,8 +141,9 @@ def before_request():
 
 @app.route('/service-worker.js')
 def sw():
-    # Placeholder response for service worker
-    return '', 204
+    # Return actual service worker content
+    response = app.send_static_file('service-worker.js') if os.path.exists('static/service-worker.js') else ('', 204)
+    return response
     
 
 # limiter = Limiter(app, key_func=get_remote_address) # type: ignore
