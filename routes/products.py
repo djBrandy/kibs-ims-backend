@@ -309,6 +309,7 @@ def delete_product(product_id):
     try:
         from flask import g
         from sqlalchemy import text
+        from app.models import InventoryAnalytics
         
         # Check if user is admin or worker
         is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
@@ -323,9 +324,22 @@ def delete_product(product_id):
                 
                 # Use SQLAlchemy ORM to delete related records safely
                 AuditLog.query.filter_by(product_id=product_id).delete()
-                InventoryAnalytics.query.filter_by(product_id=product_id).delete()
-                AlertNotification.query.filter_by(product_id=product_id).delete()
-                Purchase.query.filter_by(product_id=product_id).delete()
+                
+                # Use try/except for each table in case it doesn't exist
+                try:
+                    InventoryAnalytics.query.filter_by(product_id=product_id).delete()
+                except:
+                    pass
+                    
+                try:
+                    AlertNotification.query.filter_by(product_id=product_id).delete()
+                except:
+                    pass
+                    
+                try:
+                    Purchase.query.filter_by(product_id=product_id).delete()
+                except:
+                    pass
                 
                 # Try to delete order items if they exist
                 try:
