@@ -56,8 +56,7 @@ app.url_map.strict_slashes = False
 app.secret_key = os.environ.get('SECRET_KEY', 'kibs-ims-secret-key')
 
 
-# Get frontend URL from config
-FRONTEND_URL = app.config.get('FRONTEND_URL', 'https://kibs-ims.netlify.app')
+# FRONTEND_URL = app.config.get('FRONTEND_URL', 'https://kibs-ims.netlify.app')
 
 CORS(
     app,
@@ -68,7 +67,8 @@ CORS(
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
-                FRONTEND_URL
+                'https://kibs-ims.netlify.app'
+                # FRONTEND_URL
             ]
         }
     },
@@ -92,7 +92,7 @@ def handle_options():
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin')
-    allowed_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", FRONTEND_URL]
+    allowed_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", 'https://kibs-ims.netlify.app']
     
     if origin and origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
@@ -140,7 +140,7 @@ def before_request():
         # For development/testing, bypass auth check
         try:
             # Check if users table exists before querying
-            from sqlalchemy import inspect
+            from sqlalchemy import inspect # type: ignore
             inspector = inspect(db.engine)
             if 'users' in inspector.get_table_names():
                 from app.models import User
