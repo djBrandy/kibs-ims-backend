@@ -84,12 +84,30 @@ def signup():
     if phone and not validate_phone(phone):
         return jsonify({"success": False, "message": "Invalid phone number."}), 400
 
+    # Check if worker already exists
     if Worker.query.filter((Worker.username == username)|(Worker.email == email)).first():
         return jsonify({"success": False, "message": "Username or email already exists."}), 409
+    
+    # Check if user already exists in User table
+    if User.query.filter((User.username == username)|(User.email == email)).first():
+        return jsonify({"success": False, "message": "Username or email already exists in User table."}), 409
 
+    # Create worker in Worker table
     worker = Worker(username=username, email=email, phone=phone)
     worker.set_password(password)
     db.session.add(worker)
+    
+    # Also create user in User table with worker role
+    user = User(
+        username=username,
+        email=email,
+        phone=phone,
+        role='worker',
+        is_active=True
+    )
+    user.password_hash = generate_password_hash(password)
+    db.session.add(user)
+    
     db.session.commit()
     return jsonify({"success": True, "message": "Worker registered successfully."})
 
