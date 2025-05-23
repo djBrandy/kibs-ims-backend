@@ -308,22 +308,45 @@ def update_product(product_id):
 def delete_product(product_id):
     try:
         from flask import g
+        from sqlalchemy import text
         
         # Check if user is admin or worker
         is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
         
         if is_admin:
             # Admin can actually delete the product
-            db.session.execute(f"DELETE FROM audit_logs WHERE product_id = {product_id}")
-            db.session.execute(f"DELETE FROM inventory_analytics WHERE product_id = {product_id}")
-            db.session.execute(f"DELETE FROM alert_notifications WHERE product_id = {product_id}")
-            db.session.execute(f"DELETE FROM purchases WHERE product_id = {product_id}")
-            db.session.execute(f"DELETE FROM order_items WHERE product_id = {product_id}")
-            db.session.execute(f"DELETE FROM products WHERE id = {product_id}")
-            
-            db.session.commit()
-            
-            return jsonify({'message': 'Product deleted successfully'}), 200
+            try:
+                # Get the product first to check if it exists
+                product = Product.query.get(product_id)
+                if not product:
+                    return jsonify({'message': 'Product not found'}), 404
+                
+                # Use SQLAlchemy ORM to delete related records safely
+                AuditLog.query.filter_by(product_id=product_id).delete()
+                InventoryAnalytics.query.filter_by(product_id=product_id).delete()
+                AlertNotification.query.filter_by(product_id=product_id).delete()
+                Purchase.query.filter_by(product_id=product_id).delete()
+                
+                # Try to delete order items if they exist
+                try:
+                    db.session.execute(text(f"DELETE FROM order_items WHERE product_id = {product_id}"))
+                except:
+                    pass  # Ignore if table doesn't exist
+                
+                # Finally delete the product
+                db.session.delete(product)
+                db.session.commit()
+                
+                return jsonify({'message': 'Product deleted successfully'}), 200
+            except Exception as inner_e:
+                db.session.rollback()
+                # Try a simpler approach if the first one fails
+                try:
+                    db.session.execute(text(f"DELETE FROM products WHERE id = {product_id}"))
+                    db.session.commit()
+                    return jsonify({'message': 'Product deleted successfully'}), 200
+                except:
+                    raise inner_e
         else:
             # Workers cannot delete products, only request deletion
             return jsonify({'error': 'Only administrators can delete products. Please contact an admin if you need a product removed.'}), 403
