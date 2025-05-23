@@ -92,7 +92,13 @@ def handle_options():
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin')
-    allowed_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", 'https://kibs-ims.netlify.app']
+    allowed_origins = [
+        "http://localhost:3000", 
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173", 
+        'https://kibs-ims.netlify.app',
+        '*'
+        ]
     
     if origin and origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
