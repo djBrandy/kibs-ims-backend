@@ -149,7 +149,7 @@ def login():
             'userId': admin_user.id
         }), 200
     
-    # Regular login flow
+    # Regular login flow - first check User table
     user = User.query.filter_by(username=username).first()
     
     if user and check_password_hash(user.password_hash, password):
@@ -161,6 +161,28 @@ def login():
             'success': True, 
             'role': user.role, 
             'userId': user.id
+        }), 200
+    
+    # If not found in User table, check Worker table as fallback
+    worker = Worker.query.filter_by(username=username).first()
+    if worker and worker.check_password(password):
+        # Create a User entry for this worker to ensure future logins work
+        new_user = User(
+            username=worker.username,
+            email=worker.email,
+            phone=worker.phone,
+            role='worker',
+            is_active=True,
+            last_login=datetime.utcnow()
+        )
+        new_user.password_hash = worker.password_hash  # Copy the password hash
+        db.session.add(new_user)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'role': 'worker', 
+            'userId': new_user.id
         }), 200
     
     return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
