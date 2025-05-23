@@ -325,62 +325,8 @@ def delete_product(product_id):
             
             return jsonify({'message': 'Product deleted successfully'}), 200
         else:
-            # Worker can only request deletion
-            product = Product.query.get_or_404(product_id)
-            worker = g.user
-            
-            try:
-                # Create a deletion request
-                pending_delete = PendingDelete(
-                    worker_id=worker.id,
-                    product_id=product_id,
-                    status='pending'
-                )
-                db.session.add(pending_delete)
-                
-                # Create an alert for admins
-                alert = AlertNotification(
-                    product_id=product_id,
-                    alert_type='delete_request',
-                    last_notified=datetime.utcnow(),
-                    resolved=False
-                )
-                db.session.add(alert)
-                
-                # Add audit log
-                audit = AuditLog(
-                    product_id=product_id,
-                    user_id=worker.id,
-                    action_type='delete_request',
-                    notes=f"Worker {worker.username} is attempting to delete product {product.product_name}"
-                )
-                db.session.add(audit)
-                
-                # Try to hide product from worker view if column exists
-                try:
-                    if hasattr(product, 'hidden_from_workers'):
-                        product.hidden_from_workers = True
-                except:
-                    pass
-                
-                db.session.commit()
-                
-                return jsonify({'message': 'Delete request sent to admin. Product is now hidden from your view.'}), 200
-            except Exception as e:
-                # Fallback if tables don't exist yet
-                db.session.rollback()
-                
-                # Just add an audit log
-                audit = AuditLog(
-                    product_id=product_id,
-                    user_id=worker.id,
-                    action_type='delete_request',
-                    notes=f"Worker {worker.username} is attempting to delete product {product.product_name}"
-                )
-                db.session.add(audit)
-                db.session.commit()
-                
-                return jsonify({'message': 'Delete request sent to admin.'}), 200
+            # Workers cannot delete products, only request deletion
+            return jsonify({'error': 'Only administrators can delete products. Please contact an admin if you need a product removed.'}), 403
         
     except Exception as e:
         db.session.rollback()
