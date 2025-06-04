@@ -13,7 +13,8 @@ metrics_bp = Blueprint('metrics', __name__, url_prefix='/api/metrics')
 @login_required
 def get_performance_metrics():
     try:
-        inventory_worth = db.session.query(func.sum(Product.price_in_kshs * Product.quantity)).scalar() or 0
+        # Updated to only take cumulative value of prices tagged on each product
+        inventory_worth = db.session.query(func.sum(Product.price_in_kshs)).scalar() or 0
         
         thirty_days_ago = datetime.now() - timedelta(days=30)
         sixty_days_ago = datetime.now() - timedelta(days=60)
@@ -42,7 +43,7 @@ def get_performance_metrics():
             avg_order_value = 0
         
         previous_inventory_worth = db.session.query(
-            func.sum(Product.price_in_kshs * Product.quantity)
+            func.sum(Product.price_in_kshs)
         ).filter(
             Product.date_of_entry < thirty_days_ago
         ).scalar() or 0
@@ -143,41 +144,67 @@ def get_metric_chart_data(metric_type):
         
         labels = []
         data = []
-        
-        if metric_type == 'auditCount':
-            current_time = start_time
-            for i in range(periods):
-                period_end = current_time + delta
-                labels.append(current_time.strftime(period_format))
+        current_time = start_time
+
+        for i in range(periods):
+            period_end = current_time + delta
+            labels.append(current_time.strftime(period_format))
+
+            if metric_type == 'auditCount':
                 count = AuditLog.query.filter(
                     AuditLog.timestamp >= current_time,
                     AuditLog.timestamp < period_end
                 ).count()
                 data.append(count)
-                current_time = period_end
-        else:
-            current_time = start_time
-            for i in range(periods):
-                labels.append(current_time.strftime(period_format))
-                if metric_type == 'inventoryWorth':
-                    base_value = 10000
-                    variation = 2000 * (0.5 + (i / periods))
-                    data.append(base_value + variation)
-                elif metric_type == 'inventoryTurnover':
-                    data.append(3.0 + (i * 0.05)) 
-                    
-                elif metric_type == 'newProducts':
-                    data.append(2 if i % 4 == 0 else 0)  
-                    
-                elif metric_type == 'supplierCount':
-                    data.append(20 + (1 if i % 10 == 0 and i > 0 else 0))
-                elif metric_type == 'avgOrderValue':
-                    base_value = 120
-                    variation = 20 * (0.5 + (i / periods))
-                    data.append(base_value + variation)
-                
-                current_time += delta
-        
+            elif metric_type == 'inventoryWorth':
+                worth = db.session.query(
+                    func.sum(Product.price_in_kshs)
+                ).filter(
+                    Product.date_of_entry < period_end
+                ).scalar() or 0
+                data.append(float(worth))
+            elif metric_type == 'inventoryTurnover':
+                purchases = db.session.query(
+                    func.sum(Purchase.total_price)
+                ).filter(
+                    Purchase.purchase_date >= current_time,
+                    Purchase.purchase_date < period_end
+                ).scalar() or 0
+                inventory = db.session.query(
+                    func.sum(Product.price_in_kshs * Product.quantity)
+                ).filter(
+                    Product.date_of_entry < period_end
+                ).scalar() or 0
+                avg_inventory = float(inventory) / 2 if inventory else 1
+                turnover = float(purchases) / avg_inventory if avg_inventory else 0
+                data.append(round(turnover, 2))
+            elif metric_type == 'newProducts':
+                count = Product.query.filter(
+                    Product.date_of_entry >= current_time,
+                    Product.date_of_entry < period_end
+                ).count()
+                data.append(count)
+            elif metric_type == 'supplierCount':
+                count = db.session.query(
+                    func.count(func.distinct(Product.manufacturer))
+                ).filter(
+                    Product.date_of_entry < period_end
+                ).scalar() or 0
+                data.append(count)
+            elif metric_type == 'avgOrderValue':
+                purchases = Purchase.query.filter(
+                    Purchase.purchase_date >= current_time,
+                    Purchase.purchase_date < period_end
+                ).all()
+                if purchases:
+                    avg = sum(p.total_price for p in purchases) / len(purchases)
+                else:
+                    avg = 0
+                data.append(round(avg, 2))
+            else:
+                data.append(0)
+            current_time = period_end
+
         return jsonify({
             'labels': labels,
             'data': data,
@@ -186,7 +213,6 @@ def get_metric_chart_data(metric_type):
         }), 200
         
     except Exception as e:
-        # print(f"Error in get_metric_chart_data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @metrics_bp.route('/audit-logs', methods=['GET'])
@@ -207,6 +233,8 @@ def get_audit_logs():
         if days:
             cutoff_date = datetime.now() - timedelta(days=days)
             query = query.filter(AuditLog.timestamp >= cutoff_date)
+        
+
         
         query = query.order_by(AuditLog.timestamp.desc())
         query = query.limit(limit)

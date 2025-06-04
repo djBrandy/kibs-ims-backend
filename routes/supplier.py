@@ -87,6 +87,11 @@ def update_supplier(supplier_id):
 def delete_supplier(supplier_id):
     if request.method == 'OPTIONS':
         return '', 200
+    
+    # Check if user is admin
+    is_admin = hasattr(g, 'user') and g.user and g.user.role == 'admin'
+    if not is_admin:
+        return jsonify({'error': 'Only administrators can delete suppliers. Please contact an admin if you need a supplier removed.'}), 403
         
     supplier = Supplier.query.get_or_404(supplier_id)
     

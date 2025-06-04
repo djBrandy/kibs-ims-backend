@@ -1,14 +1,58 @@
-# Import db directly to avoid circular imports
 from flask_sqlalchemy import SQLAlchemy # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash # type: ignore
-from datetime import datetime
+from datetime import datetime, timedelta
 from itsdangerous import URLSafeTimedSerializer # type: ignore
 from flask import current_app # type: ignore
+from sqlalchemy.sql import func # type: ignore
+import json
 
 # Get db from the app module
 from app import db
 
 
+
+class Room(db.Model):
+    __tablename__ = 'rooms'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationship with products
+    products = db.relationship('Product', backref='room', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'product_count': len(self.products) if self.products else 0
+        }
+
+class DeletedItem(db.Model):
+    __tablename__ = 'deleted_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    original_id = db.Column(db.Integer, nullable=False)
+    item_type = db.Column(db.String(50), nullable=False)  # 'product', 'room', etc.
+    data = db.Column(db.JSON, nullable=False)  # Store the full item data as JSON
+    deleted_at = db.Column(db.DateTime, default=func.now())
+    expiry_date = db.Column(db.DateTime, default=lambda: datetime.now() + timedelta(days=30))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'original_id': self.original_id,
+            'item_type': self.item_type,
+            'data': self.data,
+            'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
+            'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
+            'days_remaining': (self.expiry_date - datetime.now()).days if self.expiry_date else None
+        }
 
 class Product(db.Model):
     __tablename__ = 'products'
@@ -40,6 +84,9 @@ class Product(db.Model):
     date_of_entry = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     hidden_from_workers = db.Column(db.Boolean, default=False)
     
+    # Add room relationship
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=True)
+    
     purchases = db.relationship('Purchase', backref='product', lazy=True)
     
     def to_dict(self, include_qr=True):
@@ -65,7 +112,9 @@ class Product(db.Model):
             'checkbox_controlled_substance': self.checkbox_controlled_substance,
             'checkbox_requires_regular_calibration': self.checkbox_requires_regular_calibration,
             'special_instructions': self.special_instructions,
-            'date_of_entry': self.date_of_entry.isoformat() if self.date_of_entry else None
+            'date_of_entry': self.date_of_entry.isoformat() if self.date_of_entry else None,
+            'room_id': self.room_id,
+            'room_name': self.room.name if self.room else None
         }
         
         # Add hidden_from_workers if it exists
@@ -164,8 +213,10 @@ class AuditLog(db.Model):
     new_value = db.Column(db.String(255), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=True)
     
     product = db.relationship('Product', backref='audit_logs', lazy=True)
+    room = db.relationship('Room', backref='audit_logs', lazy=True)
     
     def to_dict(self):
         return {
@@ -176,7 +227,72 @@ class AuditLog(db.Model):
             'previous_value': self.previous_value,
             'new_value': self.new_value,
             'notes': self.notes,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'room_id': self.room_id,
+            'room_name': self.room.name if self.room else None
+        }
+
+
+class LoginLog(db.Model):
+    __tablename__ = 'login_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    status = db.Column(db.String(20), default='success', nullable=False)  # success, failed
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    
+    # Relationship with User
+    user = db.relationship('User', backref='login_logs', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'username': self.user.username if self.user else None,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'status': self.status,
+            'ip_address': self.ip_address,
+            'user_agent': self.user_agent
+        }
+
+
+class SystemMetrics(db.Model):
+    __tablename__ = 'system_metrics'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    metric_name = db.Column(db.String(50), nullable=False)
+    metric_value = db.Column(db.String(100), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'metric_name': self.metric_name,
+            'metric_value': self.metric_value,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
+        }
+
+
+class AdminPanel(db.Model):
+    __tablename__ = 'admin_panel'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    active_users_count = db.Column(db.Integer, default=0)
+    total_logins = db.Column(db.Integer, default=0)
+    new_users_today = db.Column(db.Integer, default=0)
+    system_uptime = db.Column(db.String(20), default='99.9%')
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'active_users_count': self.active_users_count,
+            'total_logins': self.total_logins,
+            'new_users_today': self.new_users_today,
+            'system_uptime': self.system_uptime,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None
         }
 
 class InventoryAnalytics(db.Model):
@@ -211,7 +327,9 @@ class InventoryAnalytics(db.Model):
             'is_top_product': self.is_top_product,
             'movement_rank': self.movement_rank,
             'revenue_rank': self.revenue_rank,
-            'last_updated': self.last_updated.isoformat() if self.last_updated else None
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+            'room_id': self.product.room_id if self.product else None,
+            'room_name': self.product.room.name if self.product and self.product.room else None
         }
 
 
@@ -260,7 +378,8 @@ class Admin(db.Model):
     __tablename__ = 'admins'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
-    phone = db.Column(db.String(20), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=True)
     password_hash = db.Column(db.String(128), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
@@ -344,13 +463,14 @@ class PendingDelete(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     worker_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    reason = db.Column(db.Text, nullable=True)
     
     # Relationships
     worker = db.relationship('User', backref='delete_requests')
-    product = db.relationship('Product', backref='delete_requests')
+    product = db.relationship('Product', backref='delete_requests', foreign_keys=[product_id])
     
     def to_dict(self):
         return {
@@ -358,7 +478,9 @@ class PendingDelete(db.Model):
             'worker_id': self.worker_id,
             'worker_name': self.worker.username if self.worker else 'Unknown',
             'product_id': self.product_id,
-            'product_name': self.product.product_name if self.product else 'Unknown',
+            'product_name': self.product.product_name if self.product and self.product_id else None,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'status': self.status
+            'status': self.status,
+            'reason': self.reason,
+            'type': 'product' if self.product_id else 'worker'
         }

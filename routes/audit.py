@@ -5,6 +5,7 @@ from app.models import Product, AuditLog, Worker
 from datetime import datetime, timedelta
 from routes.auth import login_required
 import traceback
+import requests
 
 audit_bp = Blueprint('audit', __name__, url_prefix='/api/audit')
 
@@ -41,7 +42,8 @@ def scan_product(barcode):
             'quantity': product.quantity,
             'unit_of_measure': product.unit_of_measure,
             'concentration': product.concentration,
-            'special_instructions': product.special_instructions
+            'special_instructions': product.special_instructions,
+            'product_type': product.product_type  # Add product_type to the response
         }), 200
         
     except Exception as e:
@@ -63,23 +65,75 @@ def update_product(product_id):
         previous_concentration = product.concentration
         previous_instructions = product.special_instructions
         
+        # Define special product types that require special auditing
+        special_audit_types = ['Equipment', 'Reference Material', 'Protective Equipment', 'Data Storage Devices', 'Lab Furniture']
+        
         if 'quantity' in data:
-            try:
-                new_quantity = int(data['quantity'])
-                if new_quantity != previous_quantity:
-                    audit_log = AuditLog(
+            # For Equipment, focus on working status instead of quantity
+            if product.product_type.lower() == 'equipment':
+                working_status = data.get('notes', '')
+                is_not_working = 'not working' in working_status.lower()
+                
+                audit_log = AuditLog(
+                    product_id=product.id,
+                    user_id=session.get('user_id'),
+                    action_type='equipment_status_update',
+                    previous_value=previous_instructions or 'Unknown',
+                    new_value=working_status,
+                    notes=f"Equipment status: {'working' if 'working' in working_status.lower() else 'not working' if is_not_working else working_status}"
+                )
+                db.session.add(audit_log)
+                product.special_instructions = working_status
+                print(f"Updated equipment status: {working_status}")
+                
+                # If equipment is not working, flag for AI diagnostics
+                if is_not_working:
+                    # Create a diagnostic flag in the audit log
+                    diagnostic_flag = AuditLog(
                         product_id=product.id,
                         user_id=session.get('user_id'),
-                        action_type='quantity_update',
-                        previous_value=str(previous_quantity),
-                        new_value=str(new_quantity),
-                        notes=data.get('notes', 'Quantity updated')
+                        action_type='diagnostic_needed',
+                        previous_value='equipment_working',
+                        new_value='equipment_not_working',
+                        notes=f"AI diagnostic needed for {product.product_name}"
                     )
-                    db.session.add(audit_log)
-                    product.quantity = new_quantity
-                    print(f"Updated quantity from {previous_quantity} to {new_quantity}")
-            except (ValueError, TypeError) as e:
-                return jsonify({'error': f'Invalid quantity value: {str(e)}'}), 400
+                    db.session.add(diagnostic_flag)
+            # For other special product types, still track quantity but with special audit type
+            elif product.product_type in special_audit_types:
+                try:
+                    new_quantity = int(data['quantity'])
+                    if new_quantity != previous_quantity:
+                        audit_log = AuditLog(
+                            product_id=product.id,
+                            user_id=session.get('user_id'),
+                            action_type=f"{product.product_type.lower().replace(' ', '_')}_update",
+                            previous_value=str(previous_quantity),
+                            new_value=str(new_quantity),
+                            notes=data.get('notes', f'{product.product_type} updated')
+                        )
+                        db.session.add(audit_log)
+                        product.quantity = new_quantity
+                        print(f"Updated {product.product_type} quantity from {previous_quantity} to {new_quantity}")
+                except (ValueError, TypeError) as e:
+                    return jsonify({'error': f'Invalid quantity value: {str(e)}'}), 400
+            # For regular products, use the standard quantity update
+            else:
+                try:
+                    new_quantity = int(data['quantity'])
+                    if new_quantity != previous_quantity:
+                        audit_log = AuditLog(
+                            product_id=product.id,
+                            user_id=session.get('user_id'),
+                            action_type='quantity_update',
+                            previous_value=str(previous_quantity),
+                            new_value=str(new_quantity),
+                            notes=data.get('notes', 'Quantity updated')
+                        )
+                        db.session.add(audit_log)
+                        product.quantity = new_quantity
+                        print(f"Updated quantity from {previous_quantity} to {new_quantity}")
+                except (ValueError, TypeError) as e:
+                    return jsonify({'error': f'Invalid quantity value: {str(e)}'}), 400
         if 'concentration' in data:
             try:
                 if data['concentration'] and str(data['concentration']).strip():
@@ -273,12 +327,26 @@ def get_audit_logs_pdf():
 def get_product_audit_logs(product_id):
     try:
         limit = request.args.get('limit', 50, type=int)
+        include_ai_diagnostics = request.args.get('include_ai_diagnostics', 'true').lower() == 'true'
         product = Product.query.get_or_404(product_id)
         
-        logs = AuditLog.query.filter_by(product_id=product_id) \
-                            .order_by(AuditLog.timestamp.desc()) \
-                            .limit(limit) \
-                            .all()
+        query = AuditLog.query.filter_by(product_id=product_id)
+        
+        # Filter by action type if specified
+        action_type = request.args.get('action_type')
+        if action_type:
+            query = query.filter(AuditLog.action_type == action_type)
+        
+        # Special handling for AI diagnostics
+        if include_ai_diagnostics:
+            # Include AI diagnostic logs
+            query = query.order_by(AuditLog.timestamp.desc())
+        else:
+            # Exclude AI diagnostic logs
+            query = query.filter(~AuditLog.action_type.in_(['ai_diagnostic_started', 'ai_diagnosis']))
+            query = query.order_by(AuditLog.timestamp.desc())
+        
+        logs = query.limit(limit).all()
         
         logs_data = []
         for log in logs:
@@ -291,6 +359,12 @@ def get_product_audit_logs(product_id):
                 "notes": log.notes,
                 "user_id": log.user_id,
             }
+            
+            # Format AI diagnosis logs specially
+            if log.action_type == 'ai_diagnosis':
+                log_dict["is_ai_diagnosis"] = True
+                log_dict["diagnosis_summary"] = log.notes
+            
             # Fetch worker username if user_id is present
             worker_username = None
             if log.user_id:

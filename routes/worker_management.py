@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session
-from app.models import db, User, AuditLog
+from app.models import db, User, AuditLog, PendingDelete
 from routes.auth import admin_required, login_required
+from datetime import datetime, timedelta
 import json
 
 worker_bp = Blueprint('worker', __name__, url_prefix='/api/workers')
@@ -148,17 +149,39 @@ def delete_worker(worker_id):
         user_id=admin_id,
         action_type='delete_worker',
         previous_value=worker.username,
-        new_value='deleted',
-        notes=f"Admin {admin_id} deleted worker {worker_id} ({worker.username})"
+        new_value='pending_delete',
+        notes=f"Admin {admin_id} marked worker {worker_id} ({worker.username}) for deletion"
     )
     
     db.session.add(log_entry)
     
-    # Delete the worker
-    db.session.delete(worker)
+    # Create pending delete entry instead of deleting immediately
+    from datetime import datetime, timedelta
+    from app.models import PendingDelete
+    
+    # Store worker data in pending_deletes table
+    pending_delete = PendingDelete(
+        worker_id=worker.id,
+        timestamp=datetime.utcnow(),
+        status='pending',
+        reason=request.json.get('reason', 'No reason provided')
+    )
+    
+    # Set expiry date to 30 days from now
+    pending_delete.expiry_date = datetime.utcnow() + timedelta(days=30)
+    
+    # Deactivate the worker account but don't delete it yet
+    worker.is_active = False
+    worker.is_banned = True
+    worker.ban_reason = "Pending deletion"
+    
+    db.session.add(pending_delete)
     db.session.commit()
     
-    return jsonify({'success': True, 'message': 'Worker deleted'}), 200
+    return jsonify({
+        'success': True, 
+        'message': 'Worker marked for deletion and will be automatically deleted after 30 days'
+    }), 200
 
 @worker_bp.route('/activity', methods=['POST'])
 @login_required

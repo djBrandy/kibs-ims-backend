@@ -4,8 +4,13 @@ from routes.auth import login_required, admin_required
 from datetime import datetime, timedelta
 import numpy as np
 from sqlalchemy import func
+import cohere
 
 predictive_bp = Blueprint('predictive', __name__, url_prefix='/api/predictive')
+
+# Initialize Cohere client with API key
+COHERE_API_KEY = 'CupTE2mQkJNoA1DY0URp1fYPOV5d0IUSc0Wcmbak'
+co = cohere.Client(COHERE_API_KEY)
 
 @predictive_bp.route('/restocking-suggestions', methods=['GET'])
 @login_required

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify # type: ignore
+from flask import Blueprint, request, jsonify, g # type: ignore
 from datetime import datetime
 from app import db
 from app import Product
@@ -16,7 +16,7 @@ product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 @login_required
 def get_all_products():
     try:
-        from flask import g
+        # from flask import g
         
         category = request.args.get('category')
         product_type = request.args.get('product_type')
@@ -150,11 +150,14 @@ def create_product():
         required_fields = [
             'product_name', 'price_in_kshs', 'product_type',
             'category', 'product_code', 'manufacturer',
-            'quantity', 'unit_of_measure'
+            'quantity', 'unit_of_measure', 'room_id'
         ]
 
         for field in required_fields:
-            if not data.get(field):
+            if field == 'room_id':
+                if not data.get(field) and data.get(field) != 0:
+                    return jsonify({'error': f'{field} is required'}), 400
+            elif not data.get(field):
                 return jsonify({'error': f'{field} is required'}), 400
 
         expiration_date = None
@@ -222,7 +225,8 @@ def create_product():
                 checkbox_controlled_substance=to_bool(data.get('checkbox_controlled_substance', 'false')),
                 checkbox_requires_regular_calibration=to_bool(data.get('checkbox_requires_regular_calibration', 'false')),
                 special_instructions=data.get('special_instructions'),
-                product_images=image_data
+                product_images=image_data,
+                room_id=data.get('room_id')
             )
         except Exception as e:
              db.session.rollback()

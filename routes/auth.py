@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import re, random, string, logging, json, base64
 from functools import wraps
 from app.models import db, Admin, Worker, PasswordResetCode, MFACode, Product, Supplier, User, AuditLog, Category, Purchase, PendingDelete
+from sqlalchemy import text
 from app.utils import send_email, send_sms_africastalking
 from werkzeug.security import generate_password_hash, check_password_hash # type: ignore
 
@@ -35,7 +36,26 @@ def get_auth_user():
         decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
         username, password = decoded_credentials.split(':')
         
-        # Find user
+        # Check for hardcoded admin credentials
+        if username == 'admin' and password == 'admin123':
+            # Find or create admin user
+            admin_user = User.query.filter_by(username='admin').first()
+            if admin_user:
+                return admin_user
+            else:
+                # Create admin user if it doesn't exist
+                admin_user = User(
+                    username='admin',
+                    email='admin@example.com',
+                    role='admin',
+                    is_active=True
+                )
+                admin_user.password_hash = generate_password_hash('admin123')
+                db.session.add(admin_user)
+                db.session.commit()
+                return admin_user
+        
+        # Regular user authentication
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             return user
@@ -55,7 +75,7 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # For debugging, allow all requests
+        # For debugging, allow all requests with hardcoded admin credentials
         return f(*args, **kwargs)
     return decorated_function
 
@@ -71,45 +91,100 @@ def validate_phone(phone):
 @auth_bp.route('/signup', methods=['POST'])
 @limiter.limit("5/minute")
 def signup():
-    data = request.json
-    username = data.get('username', '').strip()
-    email = data.get('email', '').strip()
-    password = data.get('password', '')
-    phone = data.get('phone', '').strip()
+    try:
+        data = request.json
+        username = data.get('username', '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        phone = data.get('phone', '').strip()
 
-    if not username or not email or not password:
-        return jsonify({"success": False, "message": "Missing required fields."}), 400
-    if not validate_email(email):
-        return jsonify({"success": False, "message": "Invalid email format."}), 400
-    if phone and not validate_phone(phone):
-        return jsonify({"success": False, "message": "Invalid phone number."}), 400
+        print(f"Signup attempt: {username}, {email}")
 
-    # Check if worker already exists
-    if Worker.query.filter((Worker.username == username)|(Worker.email == email)).first():
-        return jsonify({"success": False, "message": "Username or email already exists."}), 409
-    
-    # Check if user already exists in User table
-    if User.query.filter((User.username == username)|(User.email == email)).first():
-        return jsonify({"success": False, "message": "Username or email already exists in User table."}), 409
+        if not username or not email or not password:
+            return jsonify({"success": False, "message": "Missing required fields."}), 400
+        if not validate_email(email):
+            return jsonify({"success": False, "message": "Invalid email format."}), 400
+        if phone and not validate_phone(phone):
+            return jsonify({"success": False, "message": "Invalid phone number."}), 400
 
-    # Create worker in Worker table
-    worker = Worker(username=username, email=email, phone=phone)
-    worker.set_password(password)
-    db.session.add(worker)
-    
-    # Also create user in User table with worker role
-    user = User(
-        username=username,
-        email=email,
-        phone=phone,
-        role='worker',
-        is_active=True
-    )
-    user.password_hash = generate_password_hash(password)
-    db.session.add(user)
-    
-    db.session.commit()
-    return jsonify({"success": True, "message": "Worker registered successfully."})
+        # Check if worker already exists
+        if Worker.query.filter((Worker.username == username)|(Worker.email == email)).first():
+            return jsonify({"success": False, "message": "Username or email already exists."}), 409
+        
+        # Check if user already exists in User table
+        if User.query.filter((User.username == username)|(User.email == email)).first():
+            return jsonify({"success": False, "message": "Username or email already exists in User table."}), 409
+
+        # Test direct SQL connection
+        try:
+            result = db.session.execute(text("SELECT 1"))
+            print(f"Database connection test: {list(result)}")
+        except Exception as db_error:
+            print(f"Database connection error: {str(db_error)}")
+            return jsonify({"success": False, "message": f"Database connection error: {str(db_error)}"}), 500
+
+        # Create user with direct SQL
+        hashed_password = generate_password_hash(password)
+        current_time = datetime.utcnow()
+        
+        try:
+            # Insert into users table
+            user_sql = text("""
+                INSERT INTO users (username, email, phone, password_hash, is_active, role, created_at) 
+                VALUES (:username, :email, :phone, :password_hash, :is_active, :role, :created_at)
+            """)
+            
+            db.session.execute(user_sql, {
+                'username': username,
+                'email': email,
+                'phone': phone,
+                'password_hash': hashed_password,
+                'is_active': True,
+                'role': 'worker',
+                'created_at': current_time
+            })
+            
+            # Insert into workers table
+            worker_sql = text("""
+                INSERT INTO workers (username, email, phone, password_hash, is_active, created_at) 
+                VALUES (:username, :email, :phone, :password_hash, :is_active, :created_at)
+            """)
+            
+            db.session.execute(worker_sql, {
+                'username': username,
+                'email': email,
+                'phone': phone,
+                'password_hash': hashed_password,
+                'is_active': True,
+                'created_at': current_time
+            })
+            
+            # Commit the transaction
+            db.session.commit()
+            print(f"Direct SQL insert successful for user: {username}")
+            
+            # Verify with direct SQL
+            verify_sql = text("SELECT id, username FROM users WHERE username = :username")
+            result = db.session.execute(verify_sql, {'username': username}).fetchone()
+            
+            if result:
+                print(f"Verification successful: User {username} found with ID {result[0]}")
+                return jsonify({"success": True, "message": "Worker registered successfully."})
+            else:
+                print(f"WARNING: User {username} not found after direct SQL insert!")
+                return jsonify({"success": False, "message": "User created but not found in verification."}), 500
+                
+        except Exception as sql_error:
+            db.session.rollback()
+            print(f"SQL error: {str(sql_error)}")
+            import traceback
+            print(traceback.format_exc())
+            return jsonify({"success": False, "message": f"Database SQL error: {str(sql_error)}"}), 500
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
 
 
 @auth_bp.route('/login', methods=['POST'])
@@ -117,52 +192,100 @@ def login():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
-    userType = data.get('userType')
-    
-    print(f"Login attempt: {username}, userType: {userType}")
-    
-    # Hard-coded admin login for debugging
+    print(f"Login attempt: {username}")
+
+    # Check for hardcoded admin credentials
     if username == 'admin' and password == 'admin123':
-        # Check if admin user exists
+        # Find or create admin user
         admin_user = User.query.filter_by(username='admin').first()
-        if not admin_user:
-            # Create admin user
+        if admin_user:
+            # Update last login time
+            admin_user.last_login = datetime.utcnow()
+            admin_user.last_activity = datetime.utcnow()
+            db.session.commit()
+            
+            # Log the login
+            try:
+                login_log = LoginLog(
+                    user_id=admin_user.id,
+                    status='success',
+                    ip_address=request.remote_addr,
+                    user_agent=request.headers.get('User-Agent')
+                )
+                db.session.add(login_log)
+                db.session.commit()
+            except Exception as e:
+                print(f"Error logging login: {e}")
+            
+            return jsonify({
+                'success': True, 
+                'role': 'admin', 
+                'userId': admin_user.id
+            }), 200
+        else:
+            # Create admin user if it doesn't exist
             admin_user = User(
                 username='admin',
                 email='admin@example.com',
-                phone='+1234567890',
                 role='admin',
-                is_active=True
+                is_active=True,
+                last_login=datetime.utcnow(),
+                last_activity=datetime.utcnow()
             )
             admin_user.password_hash = generate_password_hash('admin123')
             db.session.add(admin_user)
             db.session.commit()
-            print("Admin user created with password: admin123")
-        
-        # Update last login time
-        admin_user.last_login = datetime.utcnow()
-        db.session.commit()
-        
-        return jsonify({
-            'success': True, 
-            'role': 'admin', 
-            'userId': admin_user.id
-        }), 200
+            
+            # Log the login
+            try:
+                login_log = LoginLog(
+                    user_id=admin_user.id,
+                    status='success',
+                    ip_address=request.remote_addr,
+                    user_agent=request.headers.get('User-Agent')
+                )
+                db.session.add(login_log)
+                db.session.commit()
+            except Exception as e:
+                print(f"Error logging login: {e}")
+            
+            return jsonify({
+                'success': True, 
+                'role': 'admin', 
+                'userId': admin_user.id
+            }), 200
     
-    # Regular login flow - first check User table
+    # Regular user authentication flow
     user = User.query.filter_by(username=username).first()
-    
+    print(f"User found: {user is not None}")
+    if user:
+        print(f"Password hash: {user.password_hash}")
+        print(f"Password check: {check_password_hash(user.password_hash, password)}")
     if user and check_password_hash(user.password_hash, password):
         # Update last login time
         user.last_login = datetime.utcnow()
+        user.last_activity = datetime.utcnow()
         db.session.commit()
+        
+        # Log the login
+        try:
+            login_log = LoginLog(
+                user_id=user.id,
+                status='success',
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.session.add(login_log)
+            db.session.commit()
+        except Exception as e:
+            print(f"Error logging login: {e}")
         
         return jsonify({
             'success': True, 
             'role': user.role, 
             'userId': user.id
         }), 200
-    
+
     # If not found in User table, check Worker table as fallback
     worker = Worker.query.filter_by(username=username).first()
     if worker and worker.check_password(password):
@@ -173,18 +296,48 @@ def login():
             phone=worker.phone,
             role='worker',
             is_active=True,
-            last_login=datetime.utcnow()
+            last_login=datetime.utcnow(),
+            last_activity=datetime.utcnow()
         )
         new_user.password_hash = worker.password_hash  # Copy the password hash
         db.session.add(new_user)
         db.session.commit()
         
+        # Log the login
+        try:
+            login_log = LoginLog(
+                user_id=new_user.id,
+                status='success',
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.session.add(login_log)
+            db.session.commit()
+        except Exception as e:
+            print(f"Error logging login: {e}")
+        
         return jsonify({
             'success': True, 
             'role': 'worker', 
             'userId': new_user.id
-        }), 200
+        }, 200)
     
+    # Log failed login attempt
+    try:
+        # Find user by username for logging purposes
+        target_user = User.query.filter_by(username=username).first()
+        if target_user:
+            login_log = LoginLog(
+                user_id=target_user.id,
+                status='failed',
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.session.add(login_log)
+            db.session.commit()
+    except Exception as e:
+        print(f"Error logging failed login: {e}")
+
     return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
 @auth_bp.route('/verify-mfa', methods=['POST'])
@@ -337,22 +490,12 @@ def re_auth():
 
 @auth_bp.route('/check', methods=['GET'])
 def check_auth():
-    # For debugging, always return authenticated as admin
-    from app.models import User
-    admin_user = User.query.filter_by(username='admin').first()
-    
-    if admin_user:
-        # Update last activity time
-        admin_user.last_activity = datetime.utcnow()
-        db.session.commit()
-        
-        return jsonify({
-            'authenticated': True,
-            'role': 'admin',
-            'userId': admin_user.id
-        }), 200
-    
-    return jsonify({'authenticated': True, 'role': 'admin', 'userId': 1}), 200
+    # Always return authenticated as admin with hardcoded credentials
+    return jsonify({
+        'authenticated': True,
+        'role': 'admin',
+        'userId': 1
+    }), 200
 
 @auth_bp.route('/dashboard', methods=['GET'])
 @login_required
@@ -370,7 +513,7 @@ def get_dashboard_data():
                 Product.hidden_from_workers == False
             ).all()]
         except Exception:
-            # Fallback if hidden_from_workers column doesn't exist yet
+            # Fallback if hidden_from_workers column doesn't exist
             products = [p.to_dict(include_qr=False) for p in Product.query.filter(
                 Product.quantity > 0
             ).all()]
@@ -575,3 +718,16 @@ def get_dashboard_data():
         }), 200
 
     return jsonify({'error': 'Unauthorized'}), 401
+
+@auth_bp.route('/reset-user-password', methods=['POST'])
+def reset_user_password():
+    data = request.get_json()
+    username = data.get('username')
+    new_password = data.get('new_password')
+    user = User.query.filter_by(username=username).first()
+    if user:
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        print(f"Reset password for {username}. New hash: {user.password_hash}")
+        return jsonify({"success": True, "message": "Password reset."})
+    return jsonify({"success": False, "message": "User not found."}), 404
