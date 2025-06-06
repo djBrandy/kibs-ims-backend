@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify, session
 from app.models import db, User, AuditLog
-from routes.auth import login_required
 import cohere
 import traceback
 from datetime import datetime
@@ -14,30 +13,34 @@ COHERE_API_KEY = 'CupTE2mQkJNoA1DY0URp1fYPOV5d0IUSc0Wcmbak'
 co = cohere.Client(COHERE_API_KEY)
 
 @ai_chat_bp.route('/send-message', methods=['POST'])
-@login_required
 def send_message():
-    """Send a message to the KIBS AI Assistant"""
+    """Send a message to the KIBS AI Assistant (public endpoint)"""
     try:
         data = request.get_json()
         message = data.get('message', '')
         conversation_id = data.get('conversation_id')
         image_data = data.get('image')
         
+        # Removed login_required authentication, so user may not be set.
         user_id = session.get('user_id')
-        user = User.query.get(user_id)
+        if user_id:
+            user = User.query.get(user_id)
+            username = user.username if user else "unknown"
+        else:
+            username = "anonymous"
         
         # Process image if provided
         image_url = None
         if image_data:
             try:
-                # Extract base64 data
+                # Extract base64 data if it contains a prefix
                 if ',' in image_data:
                     image_data = image_data.split(',')[1]
                 
                 # Save image to temporary file
                 image_bytes = base64.b64decode(image_data)
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                filename = f"user_upload_{user_id}_{timestamp}.jpg"
+                filename = f"user_upload_{user_id or 'anon'}_{timestamp}.jpg"
                 filepath = os.path.join('uploads', filename)
                 
                 # Ensure directory exists
@@ -57,34 +60,34 @@ def send_message():
             'temperature': 0.7,
         }
         
-        # Add conversation ID if continuing a conversation
+        # Include conversation ID if provided
         if conversation_id:
             chat_params['conversation_id'] = conversation_id
         
-        # Add image if provided
+        # Include image attachment if available
         if image_url:
             chat_params['attachments'] = [{'url': image_url}]
         
-        # Call Cohere API
+        # Call Cohere API to get AI response
         response = co.chat(**chat_params)
         
-        # Log the interaction
+        # Log the interaction (user_id may be None for anonymous users)
         log_entry = AuditLog(
-            product_id=1,  # Placeholder
+            product_id=1,  # Placeholder value
             user_id=user_id,
             action_type='ai_chat',
             previous_value='user_message',
             new_value='ai_response',
-            notes=f"User {user.username} chatted with AI assistant"
+            notes=f"User {username} chatted with AI assistant"
         )
         db.session.add(log_entry)
         db.session.commit()
         
-        # Clean up image file if it was created
+        # Clean up image file if created
         if image_url and os.path.exists(image_url):
             try:
                 os.remove(image_url)
-            except:
+            except Exception:
                 pass
         
         return jsonify({

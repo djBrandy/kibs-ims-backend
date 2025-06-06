@@ -464,6 +464,7 @@ class PendingDelete(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     worker_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
     reason = db.Column(db.Text, nullable=True)
@@ -471,6 +472,7 @@ class PendingDelete(db.Model):
     # Relationships
     worker = db.relationship('User', backref='delete_requests')
     product = db.relationship('Product', backref='delete_requests', foreign_keys=[product_id])
+    room = db.relationship('Room', backref='delete_requests', foreign_keys=[room_id])
     
     def to_dict(self):
         return {
@@ -479,8 +481,10 @@ class PendingDelete(db.Model):
             'worker_name': self.worker.username if self.worker else 'Unknown',
             'product_id': self.product_id,
             'product_name': self.product.product_name if self.product and self.product_id else None,
+            'room_id': self.room_id,
+            'room_name': self.room.name if self.room and self.room_id else None,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'status': self.status,
             'reason': self.reason,
-            'type': 'product' if self.product_id else 'worker'
+            'type': 'product' if self.product_id else 'room' if self.room_id else 'worker'
         }

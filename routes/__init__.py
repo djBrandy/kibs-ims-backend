@@ -16,6 +16,7 @@ from routes.admin_panel import admin_panel_bp
 from routes.ai_diagnostics import ai_diagnostics_bp
 from routes.scheduled_tasks import scheduled_tasks_bp
 from routes.ai_chat import ai_chat_bp
+from routes.deleted_items import deleted_items_bp
 from flask import request, jsonify
 from app import app, db
 from app.models import User  # adjust import as needed
@@ -39,3 +40,4 @@ def register_routes(app):
     app.register_blueprint(ai_diagnostics_bp)
     app.register_blueprint(scheduled_tasks_bp)
     app.register_blueprint(ai_chat_bp)
+    app.register_blueprint(deleted_items_bp)

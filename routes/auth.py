@@ -25,44 +25,7 @@ def debug_session():
     print(f"ROLE: {session.get('role')}")
 
 # Simple auth middleware
-def get_auth_user():
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Basic '):
-        return None
-    
-    try:
-        # Extract and decode credentials
-        encoded_credentials = auth_header[6:]  # Remove 'Basic '
-        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-        username, password = decoded_credentials.split(':')
-        
-        # Check for hardcoded admin credentials
-        if username == 'admin' and password == 'admin123':
-            # Find or create admin user
-            admin_user = User.query.filter_by(username='admin').first()
-            if admin_user:
-                return admin_user
-            else:
-                # Create admin user if it doesn't exist
-                admin_user = User(
-                    username='admin',
-                    email='admin@example.com',
-                    role='admin',
-                    is_active=True
-                )
-                admin_user.password_hash = generate_password_hash('admin123')
-                db.session.add(admin_user)
-                db.session.commit()
-                return admin_user
-        
-        # Regular user authentication
-        user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password_hash, password):
-            return user
-    except Exception as e:
-        logging.error(f"Auth error: {e}")
-    
-    return None
+# (Authentication header handling removed)
 
 # Define decorators at the top of the file
 def login_required(f):
@@ -364,13 +327,9 @@ def verify_mfa():
     if not user:
         return jsonify({"success": False, "message": "User not found."}), 404
     
-    # Create credentials string for Basic Auth
-    credentials = f"{user.username}:{user.password}"  # This is not secure, just for demo
-    encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
-    
+    # (Removed: Basic Auth header generation and return)
     return jsonify({
-        "success": True, 
-        "auth": f"Basic {encoded_credentials}"
+        "success": True
     })
 
 @auth_bp.route('/forgot-code', methods=['POST'])
@@ -477,14 +436,10 @@ def re_auth():
         return jsonify({'success': False, 'message': 'Missing password'}), 400
 
     if check_password_hash(user.password_hash, password):
-        # Create credentials string for Basic Auth
-        credentials = f"{user.username}:{password}"
-        encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
-        
+        # (Removed: Basic Auth header generation and return)
         return jsonify({
             'success': True, 
-            'role': user.role,
-            'auth': f"Basic {encoded_credentials}"
+            'role': user.role
         }), 200
     return jsonify({'success': False, 'message': 'Invalid password'}), 401
 

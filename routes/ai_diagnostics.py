@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Product, AuditLog
 import cohere
@@ -10,7 +10,7 @@ from datetime import datetime
 ai_diagnostics_bp = Blueprint('ai_diagnostics', __name__, url_prefix='/api/ai-diagnostics')
 
 # Initialize Cohere client with API key
-# Note: In production, this should be stored in environment variables
+# Note: In production, the API key should be stored in environment variables
 COHERE_API_KEY = 'CupTE2mQkJNoA1DY0URp1fYPOV5d0IUSc0Wcmbak'
 co = cohere.Client(COHERE_API_KEY)
 
@@ -28,11 +28,13 @@ def diagnose_equipment(product_id):
         
         # Generate diagnostic questions using Cohere
         diagnostic_response = co.chat(
-            message=f"I need to diagnose a problem with {product.product_name} (type: {product.product_type}). " +
-                   f"Initial issue: '{initial_description}'. " +
-                   f"Generate exactly 10 diagnostic questions to identify the problem with this equipment. " +
-                   f"The questions should be specific to troubleshooting {product.product_type} equipment. " +
-                   f"Format the response as a JSON array of questions.",
+            message=(
+                f"I need to diagnose a problem with {product.product_name} (type: {product.product_type}). "
+                f"Initial issue: '{initial_description}'. "
+                f"Generate exactly 10 diagnostic questions to identify the problem with this equipment. "
+                f"The questions should be specific to troubleshooting {product.product_type} equipment. "
+                f"Format the response as a JSON array of questions."
+            ),
             model="command",
             temperature=0.3
         )
@@ -40,31 +42,32 @@ def diagnose_equipment(product_id):
         # Extract questions from response
         questions = []
         try:
-            # Try to parse JSON from the response
             response_text = diagnostic_response.text
-            print(f"Cohere response: {response_text[:100]}...")  # Log first 100 chars for debugging
+            print(f"Cohere response: {response_text[:100]}...")  # Log first 100 characters for debugging
             
             if '[' in response_text and ']' in response_text:
                 json_str = response_text[response_text.find('['):response_text.rfind(']')+1]
                 questions = json.loads(json_str)
             else:
                 # Fallback: extract questions by line
-                questions = [line.strip().strip('"').strip("'") for line in response_text.split('\n') 
+                questions = [line.strip().strip('"').strip("'") for line in response_text.split('\n')
                            if line.strip() and not line.strip().startswith('{') and not line.strip().startswith('}')]
                 questions = questions[:10]  # Limit to 10 questions
         except Exception as e:
             print(f"Error parsing AI response: {str(e)}")
-            # Fallback questions if parsing fails
-            questions = ["What is the specific issue you're experiencing?",
-                        "When did the problem start?",
-                        "Are there any error messages or unusual sounds?",
-                        "Have you tried restarting the equipment?",
-                        "Is the equipment receiving power?",
-                        "Are all cables properly connected?",
-                        "Has the equipment been recently moved or modified?",
-                        "Are there any visible damages?",
-                        "When was the last time the equipment worked properly?",
-                        "Has this issue happened before?"]
+            # Fallback default questions if parsing fails
+            questions = [
+                "What is the specific issue you're experiencing?",
+                "When did the problem start?",
+                "Are there any error messages or unusual sounds?",
+                "Have you tried restarting the equipment?",
+                "Is the equipment receiving power?",
+                "Are all cables properly connected?",
+                "Has the equipment been recently moved or modified?",
+                "Are there any visible damages?",
+                "When was the last time the equipment worked properly?",
+                "Has this issue happened before?"
+            ]
         
         # Ensure we have at least 10 questions
         if len(questions) < 10:
@@ -80,12 +83,12 @@ def diagnose_equipment(product_id):
                 "Have you checked all fuses and circuit breakers?",
                 "Is there any physical damage visible on the equipment?"
             ]
-            questions.extend(default_questions[:(10-len(questions))])
+            questions.extend(default_questions[: (10 - len(questions))])
         
-        # Create an initial diagnostic log entry
+        # Create an initial diagnostic log entry (user_id is set to None because authentication is removed)
         diagnostic_log = AuditLog(
             product_id=product.id,
-            user_id=session.get('user_id'),
+            user_id=None,
             action_type='ai_diagnostic_started',
             previous_value='equipment_not_working',
             new_value='diagnostic_in_progress',
@@ -97,7 +100,7 @@ def diagnose_equipment(product_id):
         return jsonify({
             'product_id': product_id,
             'product_name': product.product_name,
-            'questions': questions[:10],  # Ensure we have max 10 questions
+            'questions': questions[:10],  # Ensure maximum 10 questions
             'diagnostic_session_id': diagnostic_log.id
         }), 200
         
@@ -124,25 +127,25 @@ def submit_diagnosis(product_id):
         answers_text = "\n".join([f"Q: {q}\nA: {a}" for q, a in answers.items()])
         
         summary_response = co.chat(
-            message=f"Based on these answers about {product.product_name} (type: {product.product_type}), " +
-                   f"provide a detailed technical diagnosis summary. Include:\n" +
-                   f"1. Most likely cause of the problem\n" +
-                   f"2. Recommended troubleshooting steps\n" +
-                   f"3. Potential repair options\n\n" +
-                   f"Diagnostic information:\n{answers_text}",
+            message=(
+                f"Based on these answers about {product.product_name} (type: {product.product_type}), "
+                f"provide a detailed technical diagnosis summary. Include:\n"
+                f"1. Most likely cause of the problem\n"
+                f"2. Recommended troubleshooting steps\n"
+                f"3. Potential repair options\n\n"
+                f"Diagnostic information:\n{answers_text}"
+            ),
             model="command",
             temperature=0.2
         )
         
         problem_summary = summary_response.text
-        
-        # Format timestamp for the log
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Create audit log with the AI diagnosis
+        # Create audit log with the AI diagnosis (user_id is set to None)
         audit_log = AuditLog(
             product_id=product.id,
-            user_id=session.get('user_id'),
+            user_id=None,
             action_type='ai_diagnosis',
             previous_value='equipment_not_working',
             new_value='diagnosis_complete',
