@@ -159,39 +159,39 @@ def delete_room(room_id):
         user_data = request.get_json() or {}
         worker_id = user_data.get('user_id', 1)  # Default to 1 if not provided
         current_time = datetime.now()
-        
-        # First, add all products in the room to pending_delete
         products_added = 0
         
-        # Process products in the room
+        # First process all products in the room if any
         if room.products:
             for product in room.products:
-                # Check if product is already in pending_delete
-                if not PendingDelete.query.filter_by(product_id=product.id, status='pending').first():
-                    product_pending = PendingDelete(
-                        product_id=product.id,
-                        room_id=None,  # Don't set room_id for product entries
-                        timestamp=current_time,
-                        status='pending',
-                        reason=f"Product deletion requested as part of room deletion: {room.name}",
-                        worker_id=worker_id
-                    )
-                    db.session.add(product_pending)
-                    products_added += 1
-                    # Commit each product individually to avoid transaction issues
-                    db.session.commit()
+                # Skip products already in pending_delete
+                if PendingDelete.query.filter_by(product_id=product.id, status='pending').first():
+                    continue
+                    
+                # Add product to pending_delete
+                product_pending = PendingDelete(
+                    product_id=product.id,
+                    room_id=room_id,
+                    timestamp=current_time,
+                    status='pending',
+                    reason=f"Product deletion requested as part of room deletion: {room.name}",
+                    worker_id=worker_id
+                )
+                db.session.add(product_pending)
+                products_added += 1
         
         # Then add the room itself to pending_delete
         room_pending = PendingDelete(
-            product_id=None,  # Explicitly set product_id to None for room deletions
-            room_id=room_id,  # Store room ID in room_id field
+            product_id=None,
+            room_id=room_id,
             timestamp=current_time,
             status='pending',
             reason=f"Room deletion requested: {room.name}",
             worker_id=worker_id
         )
-        
         db.session.add(room_pending)
+        
+        # Commit everything in a single transaction
         db.session.commit()
 
         response = jsonify({
@@ -206,11 +206,75 @@ def delete_room(room_id):
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
 
-@rooms_bp.route('/api/deleted-items', methods=['GET'])
+@rooms_bp.route('/api/deleted-items', methods=['GET', 'OPTIONS'])
 def get_deleted_items():
-    """Get all deleted items"""
-    deleted_items = DeletedItem.query.all()
-    return jsonify([item.to_dict() for item in deleted_items]), 200
+    """Get all deleted items including pending deletes"""
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'GET')
+        return response, 200
+        
+    try:
+        # Get items from DeletedItem table
+        deleted_items = [item.to_dict() for item in DeletedItem.query.all()]
+        
+        # Get items from PendingDelete table
+        pending_deletes = PendingDelete.query.filter_by(status='pending').all()
+        
+        pending_items = []
+        for pd in pending_deletes:
+            item_data = {}
+            
+            # Handle product deletions
+            if pd.product_id:
+                product = Product.query.get(pd.product_id)
+                if product:
+                    item_data = {
+                        'id': f"pending_{pd.id}",
+                        'original_id': pd.product_id,
+                        'item_type': 'product',
+                        'data': product.to_dict(),
+                        'deleted_at': pd.timestamp.isoformat() if pd.timestamp else datetime.now().isoformat(),
+                        'expiry_date': ((pd.timestamp if pd.timestamp else datetime.now()) + timedelta(days=30)).isoformat(),
+                        'days_remaining': 30,
+                        'pending': True,
+                        'reason': pd.reason
+                    }
+                    pending_items.append(item_data)
+            
+            # Handle room deletions
+            elif pd.room_id:
+                room = Room.query.get(pd.room_id)
+                if room:
+                    item_data = {
+                        'id': f"pending_{pd.id}",
+                        'original_id': pd.room_id,
+                        'item_type': 'room',
+                        'data': room.to_dict(),
+                        'deleted_at': pd.timestamp.isoformat() if pd.timestamp else datetime.now().isoformat(),
+                        'expiry_date': ((pd.timestamp if pd.timestamp else datetime.now()) + timedelta(days=30)).isoformat(),
+                        'days_remaining': 30,
+                        'pending': True,
+                        'reason': pd.reason
+                    }
+                    pending_items.append(item_data)
+        
+        # Combine both lists
+        all_items = deleted_items + pending_items
+        
+        # Add CORS headers
+        response = jsonify(all_items)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'GET')
+        return response, 200
+    except Exception as e:
+        print(f"Error getting deleted items: {str(e)}")
+        response = jsonify({'error': f'Failed to get deleted items: {str(e)}'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
 
 @rooms_bp.route('/api/deleted-items/<int:item_id>/restore', methods=['POST'])
 def restore_deleted_item(item_id):
@@ -230,3 +294,37 @@ def restore_deleted_item(item_id):
     db.session.commit()
 
     return jsonify({'message': f'{deleted_item.item_type.capitalize()} restored successfully'}), 200
+
+@rooms_bp.route('/api/pending-deletes/<int:item_id>/cancel', methods=['POST', 'OPTIONS'])
+def cancel_pending_delete(item_id):
+    """Cancel a pending delete"""
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response, 200
+        
+    try:
+        pending_delete = PendingDelete.query.get_or_404(item_id)
+        
+        # Delete the pending delete entry
+        db.session.delete(pending_delete)
+        db.session.commit()
+        
+        # Determine the type of item that was restored
+        item_type = "unknown"
+        if pending_delete.product_id:
+            item_type = "product"
+        elif pending_delete.room_id:
+            item_type = "room"
+        
+        response = jsonify({'message': f'{item_type.capitalize()} deletion cancelled successfully'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error cancelling pending delete: {str(e)}")
+        response = jsonify({'error': f'Failed to cancel pending delete: {str(e)}'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500

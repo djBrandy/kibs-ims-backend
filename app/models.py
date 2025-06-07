@@ -475,6 +475,7 @@ class PendingDelete(db.Model):
     room = db.relationship('Room', backref='delete_requests', foreign_keys=[room_id])
     
     def to_dict(self):
+        item_type = 'product' if self.product_id else 'room' if self.room_id else 'worker'
         return {
             'id': self.id,
             'worker_id': self.worker_id,
@@ -486,5 +487,5 @@ class PendingDelete(db.Model):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'status': self.status,
             'reason': self.reason,
-            'type': 'product' if self.product_id else 'room' if self.room_id else 'worker'
+            'item_type': item_type  # Use item_type instead of type for consistency
         }
