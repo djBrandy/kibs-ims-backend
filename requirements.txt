@@ -8,3 +8,4 @@ werkzeug==2.2.3
 cohere==4.37
 requests==2.31.0
 gunicorn==20.1.0
+Flask-Mail==0.9.1
