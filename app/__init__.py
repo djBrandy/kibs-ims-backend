@@ -9,10 +9,49 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# --- Config class is now defined directly here ---
+load_dotenv()
+
+class Config:
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        'DATABASE_URL',
+        'mysql+pymysql://root:%23Lerengesu@localhost/kibs_ims_db'
+    )
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 60,
+        'pool_timeout': 30,
+        'pool_size': 10,
+        'max_overflow': 20,
+        'connect_args': {'connect_timeout': 10}
+    }
+    SQLALCHEMY_COMMIT_ON_TEARDOWN = True
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SECRET_KEY = os.getenv('SECRET_KEY', 'kibs-ims-secret-key')
+    DEBUG = os.getenv('DEBUG', 'False') == 'True'
+    SESSION_TYPE = 'filesystem'
+    SESSION_PERMANENT = True
+    SESSION_USE_SIGNER = True
+    PERMANENT_SESSION_LIFETIME = 900
+    CORS_ALLOWED_ORIGINS = [
+        os.getenv('FRONTEND_URL', 'http://localhost:5000'),
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'https://kibsims.com',
+        'https://www.kibsims.com'
+    ]
+    COHERE_API_KEY = os.getenv('COHERE_API_KEY', 'EmP9noMEe5ZoRERoJAxRE3n2onzptiSo1D1D1Dg3')
+    UPC_DATABASE_API_KEY = os.getenv('UPC_DATABASE_API_KEY', 'E03A35842EE73F796534FF0C15629C9C')
+    # FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5000')
+# --- End Config class ---
+
 try:
-    from .config import Config
+    # from .config import Config  # REMOVE THIS LINE, Config is now defined above
+    pass
 except ImportError:
-    from config import Config
+    pass
 
 try:
     from .database import db, migrate
