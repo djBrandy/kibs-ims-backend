@@ -12,10 +12,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # --- Config class is now defined directly here ---
 load_dotenv()
 
+
 class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DATABASE_URL',
-        'mysql+pymysql://root:%23Lerengesu@localhost/kibs_ims_db'
+        'mysql+pymysql://ims_user:%40Kibs.123@localhost/ims-kibs-db'
     )
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,
@@ -42,10 +43,13 @@ class Config:
         'https://kibsims.com',
         'https://www.kibsims.com'
     ]
-    COHERE_API_KEY = os.getenv('COHERE_API_KEY', 'EmP9noMEe5ZoRERoJAxRE3n2onzptiSo1D1D1Dg3')
-    UPC_DATABASE_API_KEY = os.getenv('UPC_DATABASE_API_KEY', 'E03A35842EE73F796534FF0C15629C9C')
+    COHERE_API_KEY = os.getenv(
+        'COHERE_API_KEY', 'EmP9noMEe5ZoRERoJAxRE3n2onzptiSo1D1D1Dg3')
+    UPC_DATABASE_API_KEY = os.getenv(
+        'UPC_DATABASE_API_KEY', 'E03A35842EE73F796534FF0C15629C9C')
     # FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5000')
 # --- End Config class ---
+
 
 try:
     # from .config import Config  # REMOVE THIS LINE, Config is now defined above
@@ -67,31 +71,33 @@ except ImportError:
 mail = Mail()
 
 # Application Factory
+
+
 def create_app():
     load_dotenv()
-    
+
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'dist'))
-    
+
     app = Flask(
         __name__,
         static_folder=DIST_DIR,
         template_folder=DIST_DIR
     )
     app.config.from_object(Config)
-    
+
     # Initialize extensions with the app context
     db.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
-    
+
     # Set up customized CORS handling
     setup_cors(app)
-    
+
     # Register blue-printed routes
     from routes import register_routes
     register_routes(app)
-    
+
     # Service-worker endpoint (optional)
     @app.route("/service-worker.js")
     def sw():
@@ -120,13 +126,14 @@ def create_app():
         # For API routes that don't exist, return 404
         if path.startswith('api/'):
             return page_not_found(None)
-        
+
         full_path = os.path.join(DIST_DIR, path)
         if path and os.path.exists(full_path):
             return send_from_directory(DIST_DIR, path)
         return send_from_directory(DIST_DIR, "index.html")
-    
+
     return app
+
 
 # Create the singleton application instance
 app = create_app()
