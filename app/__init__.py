@@ -3,9 +3,9 @@ from flask import Flask, send_from_directory, request, render_template
 from flask_cors import CORS
 from flask_mail import Mail
 from dotenv import load_dotenv
-from app.config import Config
-from app.database import db, migrate
-from app.cors_fix import setup_cors
+from .config import Config
+from .database import db, migrate
+from .cors_fix import setup_cors
 
 # Initialize extensions
 mail = Mail()
@@ -33,6 +33,9 @@ def create_app():
     setup_cors(app)
     
     # Register blue-printed routes
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
     from routes import register_routes
     register_routes(app)
     
