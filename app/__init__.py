@@ -1,11 +1,28 @@
 import os
+import sys
 from flask import Flask, send_from_directory, request, render_template
 from flask_cors import CORS
 from flask_mail import Mail
 from dotenv import load_dotenv
-from .config import Config
-from .database import db, migrate
-from .cors_fix import setup_cors
+
+# Add current directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from .config import Config
+except ImportError:
+    from config import Config
+
+try:
+    from .database import db, migrate
+except ImportError:
+    from database import db, migrate
+
+try:
+    from .cors_fix import setup_cors
+except ImportError:
+    from cors_fix import setup_cors
 
 # Initialize extensions
 mail = Mail()
@@ -33,9 +50,6 @@ def create_app():
     setup_cors(app)
     
     # Register blue-printed routes
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
     from routes import register_routes
     register_routes(app)
     
