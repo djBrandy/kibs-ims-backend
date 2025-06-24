@@ -9,7 +9,7 @@ import time
 
 admin_panel_bp = Blueprint('admin_panel', __name__, url_prefix='/api/admin-panel')
 
-@admin_panel_bp.route('/', methods=['GET'])
+@admin_panel_bp.route('/', methods=['GET', 'OPTIONS'])
 @token_required
 def get_admin_panel_data():
     """Get admin panel data including metrics and user activity"""

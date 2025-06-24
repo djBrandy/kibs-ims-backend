@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g # type: ignore
-from app import db
+from app.database import db
 from app.models import Supplier
 from datetime import datetime
 from flask_cors import cross_origin # type: ignore

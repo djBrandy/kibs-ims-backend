@@ -1,9 +1,9 @@
 from flask import Blueprint, jsonify, request # type: ignore
-from app import db, Product, Purchase
+from app.database import db
+from app.models import Product, Purchase, AuditLog, InventoryAnalytics
 from datetime import datetime, timedelta
 from routes.auth import login_required
 from sqlalchemy import func, desc, case # type: ignore
-from app.models import AuditLog, InventoryAnalytics
 import traceback
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')

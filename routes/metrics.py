@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request # type: ignore
-from app import db
-from app.models import Product, Purchase, Supplier, AuditLog 
+from app.database import db
+from app.models import Product, Purchase, Supplier, AuditLog
 
 from sqlalchemy import func, desc # type: ignore
 from datetime import datetime, timedelta

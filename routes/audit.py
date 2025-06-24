@@ -1,6 +1,5 @@
-from flask import Blueprint, request, jsonify # type: ignore
-from flask import session # type: ignore
-from app import db # Keep db
+from flask import Blueprint, request, jsonify, session # type: ignore
+from app.database import db
 from app.models import Product, AuditLog, Worker 
 from datetime import datetime, timedelta
 from routes.auth import login_required

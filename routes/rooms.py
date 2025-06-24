@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.models import Room, Product, DeletedItem, PendingDelete
-from app import db
+from app.database import db
 from datetime import datetime, timedelta
 from flask_cors import CORS  # type: ignore
 

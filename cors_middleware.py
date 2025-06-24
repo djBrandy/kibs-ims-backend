@@ -5,6 +5,9 @@ class CORSMiddleware:
         self.app = app
         self.allowed_origins = allowed_origins or [
             "http://localhost:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
             "https://kibs-ims.vercel.app",
             "https://kibs-ims-brandons-projects-cda52e2c.vercel.app"
         ]
@@ -16,12 +19,14 @@ class CORSMiddleware:
     def after_request(self, response):
         origin = request.headers.get('Origin')
         
-        if origin and origin in self.allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials, x-auth-status'
-            response.headers['Vary'] = 'Origin'
+        # Allow any origin in development mode
+        if origin:
+            if origin in self.allowed_origins or 'localhost' in origin or '127.0.0.1' in origin:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials, x-auth-status'
+                response.headers['Vary'] = 'Origin'
             
         return response
         
@@ -29,7 +34,7 @@ class CORSMiddleware:
         if request.method == "OPTIONS":
             origin = request.headers.get('Origin')
             
-            if origin and origin in self.allowed_origins:
+            if origin and (origin in self.allowed_origins or 'localhost' in origin or '127.0.0.1' in origin):
                 headers = {
                     'Access-Control-Allow-Origin': origin,
                     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -39,4 +44,5 @@ class CORSMiddleware:
                     'Vary': 'Origin',
                     'Content-Type': 'text/plain'
                 }
-                return '', 204, headers
+                # Return a 200 OK response for OPTIONS requests to prevent redirects
+                return '', 200, headers

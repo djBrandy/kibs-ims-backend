@@ -1,79 +1,82 @@
-from flask import Flask, request, jsonify, redirect, g  # type: ignore
-from flask_sqlalchemy import SQLAlchemy  # type: ignore
-from flask_migrate import Migrate  # type: ignore
-from flask_cors import CORS  # type: ignore
-from flask_mail import Mail  # type: ignore
 import os
-from dotenv import load_dotenv  # type: ignore
+from flask import Flask, send_from_directory, request, render_template
+from flask_cors import CORS
+from flask_mail import Mail
+from dotenv import load_dotenv
 from app.config import Config
-
-# Load environment variables from .env
-# load_dotenv()  # Already called in config.py, so you can remove or keep for redundancy
-
-app = Flask(__name__)
-app.config.from_object(Config)
+from app.database import db, migrate
+from app.cors_fix import setup_cors
 
 # Initialize extensions
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
-mail = Mail(app)
+mail = Mail()
 
-# Import models
-from app.models import (
-    Product, Supplier, Purchase, AlertNotification,
-    AuditLog, InventoryAnalytics, Category,
-    Order, OrderItem, Room, DeletedItem
-)
-
-app.url_map.strict_slashes = False
-
-# Set up CORS with allowed origins
-CORS(
-    app,
-    supports_credentials=True,
-    origins=["http://localhost:5173", "https://kibs-ims.vercel.app"],
-    allow_headers=["Content-Type", "Authorization", "x-auth-status"],
-    expose_headers=["Access-Control-Allow-Origin"],
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-)
-
-# Authentication middleware removed:
-# The "before_request" function that previously checked for tokens/Basic auth
-# has been removed so that all API endpoints are publicly accessible.
-
-# Add CORS headers after each request
-@app.after_request
-def add_cors_headers(response):
-    origin = request.headers.get('Origin')
-    allowed_origins = ["http://localhost:5173", "https://kibs-ims.vercel.app"]
-    if origin in allowed_origins:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials, x-auth-status'
-    return response
-
-# Serve the service worker if available
-@app.route('/service-worker.js')
-def sw():
-    if os.path.exists('static/service-worker.js'):
-        return app.send_static_file('service-worker.js')
-    return '', 204
-
-# Register application routes
-from routes import register_routes
-register_routes(app)
-
-# Factory function for testing or scaling purposes
+# Application Factory
 def create_app():
-    new_app = Flask(__name__)
-    new_app.config.update(app.config)
-    db.init_app(new_app)
-    migrate.init_app(new_app, db)
-    mail.init_app(new_app)
-    register_routes(new_app)
-    return new_app
+    load_dotenv()
+    
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'dist'))
+    
+    app = Flask(
+        __name__,
+        static_folder=DIST_DIR,
+        template_folder=DIST_DIR
+    )
+    app.config.from_object(Config)
+    
+    # Initialize extensions with the app context
+    db.init_app(app)
+    migrate.init_app(app, db)
+    mail.init_app(app)
+    
+    # Set up customized CORS handling
+    setup_cors(app)
+    
+    # Register blue-printed routes
+    from routes import register_routes
+    register_routes(app)
+    
+    # Service-worker endpoint (optional)
+    @app.route("/service-worker.js")
+    def sw():
+        sw_path = os.path.join(DIST_DIR, "service-worker.js")
+        if os.path.exists(sw_path):
+            return send_from_directory(DIST_DIR, "service-worker.js")
+        return "", 204
 
-# Run app directly
-if __name__ == '__main__':
-    app.run(debug=app.config['DEBUG'])
+    # Serve vite.svg if available
+    @app.route("/vite.svg")
+    def vite_svg():
+        vite_svg_path = os.path.join(DIST_DIR, "vite.svg")
+        if os.path.exists(vite_svg_path):
+            return send_from_directory(DIST_DIR, "vite.svg")
+        return "", 404
+
+    # Custom error handler for 404
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template('404.html'), 404
+
+    # Catch-all route for frontend requests (assumes a React app)
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def serve_frontend(path):
+        # For API routes that don't exist, return 404
+        if path.startswith('api/'):
+            return page_not_found(None)
+        
+        full_path = os.path.join(DIST_DIR, path)
+        if path and os.path.exists(full_path):
+            return send_from_directory(DIST_DIR, path)
+        return send_from_directory(DIST_DIR, "index.html")
+    
+    return app
+
+# Create the singleton application instance
+app = create_app()
+
+# Only run the built-in server when executing the file directly.
+if __name__ == "__main__":
+    # Use PORT from environment variables (Heroku sets this) or default to 5000.
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from app import db
+from app.database import db
 from app.models import DeletedItem, Product, Room, Supplier, User, PendingDelete
 import json
 from datetime import datetime, timedelta
@@ -252,11 +252,17 @@ def permanently_delete_item(item_id):
         return jsonify({"error": f"Failed to delete item: {str(e)}"}), 500
 
 
-# for appending to the deleted items table
-@deleted_items_bp.route('', methods=['POST'])
+# for appending to the deleted items table@deleted_items_bp.route('', methods=['POST'])
 @cross_origin()
 def add_deleted_item():
     data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['original_id', 'item_type', 'data']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+            
     try:
         new_item = DeletedItem(
             original_id=data.get('original_id'),

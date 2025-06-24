@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app import db
+from app.database import db
 from app.models import Product, AuditLog
 import cohere
 import json

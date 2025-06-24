@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify # type: ignore
-from app import db 
+from app.database import db 
 from app.models import Product, Purchase, AlertNotification, Supplier 
 from routes.auth import login_required
 import traceback
