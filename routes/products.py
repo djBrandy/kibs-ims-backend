@@ -49,6 +49,15 @@ def get_all_products():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+
+# Removed invalid function and decorator. If needed, implement as a blueprint route with a valid function name.
+# Example (uncomment if you want to keep this endpoint as part of the blueprint):
+
+@product_bp.route("/outbound_ip", methods=["GET"])
+def outbound_ip():
+    import requests # type: ignore
+    return requests.get("https://api.ipify.org").text
 
 @product_bp.route('/<int:product_id>', methods=['GET'])
 def get_product(product_id):
