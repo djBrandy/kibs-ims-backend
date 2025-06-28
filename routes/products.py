@@ -53,7 +53,7 @@ def get_all_products():
     
 
 
-@app.route('/my-outbound-ip')
+@product_bp.route('/my-outbound-ip')
 def get_outbound_ip():
     try:
         response = requests.get('https://api.ipify.org?format=json')
@@ -62,6 +62,9 @@ def get_outbound_ip():
         return {"outbound_ip": ip_data.get('ip', 'Could not determine IP')}
     except requests.exceptions.RequestException as e:
         return {"error": f"Failed to get outbound IP: {e}"}, 500
+
+
+
 
 @product_bp.route('/<int:product_id>', methods=['GET'])
 def get_product(product_id):
