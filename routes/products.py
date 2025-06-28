@@ -3,6 +3,7 @@ from datetime import datetime
 from app.database import db
 from app.models import Product
 import base64
+import requests
 
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
@@ -51,13 +52,16 @@ def get_all_products():
         return jsonify({'error': str(e)}), 500
     
 
-# Removed invalid function and decorator. If needed, implement as a blueprint route with a valid function name.
-# Example (uncomment if you want to keep this endpoint as part of the blueprint):
 
-@product_bp.route("/outbound_ip", methods=["GET"])
-def outbound_ip():
-    import requests # type: ignore
-    return requests.get("https://api.ipify.org").text
+@app.route('/my-outbound-ip')
+def get_outbound_ip():
+    try:
+        response = requests.get('https://api.ipify.org?format=json')
+        response.raise_for_status() # Raise an exception for bad status codes
+        ip_data = response.json()
+        return {"outbound_ip": ip_data.get('ip', 'Could not determine IP')}
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Failed to get outbound IP: {e}"}, 500
 
 @product_bp.route('/<int:product_id>', methods=['GET'])
 def get_product(product_id):
