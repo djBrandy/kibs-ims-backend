@@ -24,6 +24,7 @@ def register_routes(app):
     from routes.qr_codes import qr_code_bp
     from routes.ai_agent import ai_agent_bp
     from routes.inventory_assistant import inventory_assistant_bp
+    from routes.admin_setup import admin_setup_bp
     
     app.register_blueprint(product_bp)
     app.register_blueprint(supplier_bp)
@@ -47,3 +48,4 @@ def register_routes(app):
     app.register_blueprint(qr_code_bp)
     app.register_blueprint(ai_agent_bp)
     app.register_blueprint(inventory_assistant_bp)
+    app.register_blueprint(admin_setup_bp)

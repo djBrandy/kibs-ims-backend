@@ -2,13 +2,13 @@ from flask import Blueprint, request, jsonify, g # type: ignore
 from app.database import db
 from app.models import Supplier
 from datetime import datetime
-from flask_cors import cross_origin # type: ignore
+
 from routes.auth import login_required
 
 supplier_bp = Blueprint('supplier', __name__, url_prefix='/api/suppliers')
 
+
 @supplier_bp.route('/', methods=['GET', 'OPTIONS'])
-@cross_origin()
 @login_required
 def get_all_suppliers():
     if request.method == 'OPTIONS':
@@ -21,7 +21,6 @@ def get_all_suppliers():
         return jsonify({'error': str(e)}), 500
 
 @supplier_bp.route('/<int:supplier_id>', methods=['GET', 'OPTIONS'])
-@cross_origin()
 @login_required
 def get_supplier(supplier_id):
     if request.method == 'OPTIONS':
@@ -31,7 +30,6 @@ def get_supplier(supplier_id):
     return jsonify(supplier.to_dict()), 200
 
 @supplier_bp.route('/', methods=['POST', 'OPTIONS'])
-@cross_origin()
 @login_required
 def create_supplier():
     if request.method == 'OPTIONS':
@@ -57,7 +55,6 @@ def create_supplier():
     return jsonify(new_supplier.to_dict()), 201
 
 @supplier_bp.route('/<int:supplier_id>', methods=['PUT', 'OPTIONS'])
-@cross_origin()
 @login_required
 def update_supplier(supplier_id):
     if request.method == 'OPTIONS':
@@ -82,7 +79,6 @@ def update_supplier(supplier_id):
     return jsonify(supplier.to_dict()), 200
 
 @supplier_bp.route('/<int:supplier_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
 @login_required
 def delete_supplier(supplier_id):
     if request.method == 'OPTIONS':

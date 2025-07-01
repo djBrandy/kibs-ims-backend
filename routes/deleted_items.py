@@ -3,22 +3,15 @@ from app.database import db
 from app.models import DeletedItem, Product, Room, Supplier, User, PendingDelete
 import json
 from datetime import datetime, timedelta
-from flask_cors import cross_origin, CORS
+
 
 deleted_items_bp = Blueprint(
     'deleted_items', __name__, url_prefix='/api/deleted-items')
 
-# Apply CORS specifically to this blueprint without the Authorization header
-CORS(
-    deleted_items_bp,
-    origins=["http://localhost:5173", "https://kibs-ims.vercel.app"],
-    allow_headers=["Content-Type", "X-API-Key"],
-    supports_credentials=True
-)
+
 
 
 @deleted_items_bp.route('', methods=['GET'])
-@cross_origin()
 def get_deleted_items():
     """Get all deleted items including pending deletes"""
 
@@ -139,7 +132,6 @@ def get_deleted_items():
 
 
 @deleted_items_bp.route('/<item_id>/restore', methods=['POST'])
-@cross_origin()
 def restore_item(item_id):
     """Restore a deleted item"""
     # Check if this is a pending delete item
@@ -213,7 +205,6 @@ def restore_item(item_id):
 
 
 @deleted_items_bp.route('/<item_id>', methods=['DELETE'])
-@cross_origin()
 def permanently_delete_item(item_id):
     """Permanently delete an item"""
     # Check if this is a pending delete item
@@ -253,7 +244,6 @@ def permanently_delete_item(item_id):
 
 
 # for appending to the deleted items table@deleted_items_bp.route('', methods=['POST'])
-@cross_origin()
 def add_deleted_item():
     data = request.get_json()
     

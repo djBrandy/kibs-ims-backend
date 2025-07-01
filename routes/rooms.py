@@ -2,10 +2,8 @@ from flask import Blueprint, request, jsonify
 from app.models import Room, Product, DeletedItem, PendingDelete
 from app.database import db
 from datetime import datetime, timedelta
-from flask_cors import CORS  # type: ignore
 
 rooms_bp = Blueprint('rooms', __name__)
-CORS(rooms_bp)
 
 # --- Custom Error Handlers ---
 @rooms_bp.errorhandler(404)
@@ -26,11 +24,7 @@ def handle_500(error):
 def get_rooms():
     """Get all rooms"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'GET')
-        return response, 200
+        return jsonify({}), 200
         
     try:
         # Get all rooms
@@ -46,43 +40,25 @@ def get_rooms():
         rooms_data = [room.to_dict() for room in rooms 
                      if room.id not in pending_delete_room_ids]
         
-        response = jsonify(rooms_data)
+        return jsonify(rooms_data), 200
     except Exception as e:
         print(f"Error fetching rooms: {str(e)}")
-        response = jsonify([])  # Return empty array on error
-        
-    # Always add CORS headers
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    response.headers.add('Access-Control-Allow-Methods', 'GET')
-    return response, 200
+        return jsonify([]), 200
 
 @rooms_bp.route('/api/rooms/<int:room_id>', methods=['GET', 'OPTIONS'])
 def get_room(room_id):
     """Get a specific room by ID"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'GET')
-        return response, 200
+        return jsonify({}), 200
         
     room = Room.query.get_or_404(room_id)
-    response = jsonify(room.to_dict())
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    response.headers.add('Access-Control-Allow-Methods', 'GET')
-    return response, 200
+    return jsonify(room.to_dict()), 200
 
 @rooms_bp.route('/api/rooms', methods=['POST', 'OPTIONS'])
 def create_room():
     """Create a new room"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        return response, 200
+        return jsonify({}), 200
 
     data = request.get_json()
 
@@ -108,11 +84,7 @@ def create_room():
 def update_room(room_id):
     """Update a room"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'PUT')
-        return response, 200
+        return jsonify({}), 200
 
     room = Room.query.get_or_404(room_id)
     data = request.get_json()
@@ -134,26 +106,18 @@ def update_room(room_id):
 def delete_room(room_id):
     """Add room and its products to pending_delete without removing them from their tables"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE')
-        return response, 200
+        return jsonify({}), 200
 
     try:
         # Use get instead of get_or_404 to handle missing rooms gracefully
         room = Room.query.get(room_id)
         if not room:
-            response = jsonify({'error': f'Room with ID {room_id} not found'})
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            return response, 404
+            return jsonify({'error': f'Room with ID {room_id} not found'}), 404
 
         # Check if room is already in pending_delete
         existing_pending = PendingDelete.query.filter_by(room_id=room_id, status='pending').first()
         if existing_pending:
-            response = jsonify({'error': 'This room is already pending deletion'})
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            return response, 409
+            return jsonify({'error': 'This room is already pending deletion'}), 409
 
         # Get user_id from request
         user_data = request.get_json() or {}
@@ -194,27 +158,19 @@ def delete_room(room_id):
         # Commit everything in a single transaction
         db.session.commit()
 
-        response = jsonify({
+        return jsonify({
             'message': f'Room and {products_added} products marked for deletion and awaiting approval'
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 200
+        }), 200
     except Exception as e:
         db.session.rollback()
         print(f"Error processing room deletion request: {str(e)}")
-        response = jsonify({'error': f'Failed to process deletion request: {str(e)}'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 500
+        return jsonify({'error': f'Failed to process deletion request: {str(e)}'}), 500
 
 @rooms_bp.route('/api/deleted-items', methods=['GET', 'OPTIONS'])
 def get_deleted_items():
     """Get all deleted items including pending deletes"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'GET')
-        return response, 200
+        return jsonify({}), 200
         
     try:
         # Get items from DeletedItem table
@@ -264,17 +220,10 @@ def get_deleted_items():
         # Combine both lists
         all_items = deleted_items + pending_items
         
-        # Add CORS headers
-        response = jsonify(all_items)
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'GET')
-        return response, 200
+        return jsonify(all_items), 200
     except Exception as e:
         print(f"Error getting deleted items: {str(e)}")
-        response = jsonify({'error': f'Failed to get deleted items: {str(e)}'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 500
+        return jsonify({'error': f'Failed to get deleted items: {str(e)}'}), 500
 
 @rooms_bp.route('/api/deleted-items/<int:item_id>/restore', methods=['POST'])
 def restore_deleted_item(item_id):
@@ -299,11 +248,7 @@ def restore_deleted_item(item_id):
 def cancel_pending_delete(item_id):
     """Cancel a pending delete"""
     if request.method == 'OPTIONS':
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        return response, 200
+        return jsonify({}), 200
         
     try:
         pending_delete = PendingDelete.query.get_or_404(item_id)
@@ -319,12 +264,8 @@ def cancel_pending_delete(item_id):
         elif pending_delete.room_id:
             item_type = "room"
         
-        response = jsonify({'message': f'{item_type.capitalize()} deletion cancelled successfully'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 200
+        return jsonify({'message': f'{item_type.capitalize()} deletion cancelled successfully'}), 200
     except Exception as e:
         db.session.rollback()
         print(f"Error cancelling pending delete: {str(e)}")
-        response = jsonify({'error': f'Failed to cancel pending delete: {str(e)}'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 500
+        return jsonify({'error': f'Failed to cancel pending delete: {str(e)}'}), 500

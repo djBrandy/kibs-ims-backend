@@ -56,13 +56,11 @@ pydantic_core
 Pygments
 PyJWT
 PyMySQL
-python-dotenv
 PyYAML
 qrcode
 reportlab
 requests
 rich
-schedule
 schema
 six
 sniffio

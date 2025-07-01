@@ -1,71 +1,24 @@
 import os
 import sys
-from flask import Flask, send_from_directory, request, render_template
+from flask import Flask, send_from_directory, request, render_template, make_response
 from flask_cors import CORS
 from flask_mail import Mail
-from dotenv import load_dotenv
 
 # Add current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# --- Config class is now defined directly here ---
-load_dotenv()
-
-
-class Config:
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        'DATABASE_URL',
-        'mysql+pymysql://ims_user:%40Kibs.123@localhost/ims-kibs-db'
-    )
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_pre_ping': True,
-        'pool_recycle': 60,
-        'pool_timeout': 30,
-        'pool_size': 10,
-        'max_overflow': 20,
-        'connect_args': {'connect_timeout': 10}
-    }
-    SQLALCHEMY_COMMIT_ON_TEARDOWN = True
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SECRET_KEY = os.getenv('SECRET_KEY', 'kibs-ims-secret-key')
-    DEBUG = os.getenv('DEBUG', 'False') == 'True'
-    SESSION_TYPE = 'filesystem'
-    SESSION_PERMANENT = True
-    SESSION_USE_SIGNER = True
-    PERMANENT_SESSION_LIFETIME = 900
-    CORS_ALLOWED_ORIGINS = [
-        os.getenv('FRONTEND_URL', 'http://localhost:5000'),
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'https://kibsims.com',
-        'https://www.kibsims.com'
-    ]
-    COHERE_API_KEY = os.getenv(
-        'COHERE_API_KEY', 'EmP9noMEe5ZoRERoJAxRE3n2onzptiSo1D1D1Dg3')
-    UPC_DATABASE_API_KEY = os.getenv(
-        'UPC_DATABASE_API_KEY', 'E03A35842EE73F796534FF0C15629C9C')
-    # FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5000')
-# --- End Config class ---
-
-
 try:
-    # from .config import Config  # REMOVE THIS LINE, Config is now defined above
-    pass
+    from .config import Config
 except ImportError:
-    pass
+    from config import Config
 
 try:
     from .database import db, migrate
 except ImportError:
     from database import db, migrate
 
-try:
-    from .cors_fix import setup_cors
-except ImportError:
-    from cors_fix import setup_cors
+
 
 # Initialize extensions
 mail = Mail()
@@ -74,8 +27,6 @@ mail = Mail()
 
 
 def create_app():
-    load_dotenv()
-
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'dist'))
 
@@ -90,13 +41,46 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
+    
+    # Configure CORS to allow all origins
+    CORS(app, origins="*", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers="*")
 
-    # Set up customized CORS handling
-    setup_cors(app)
+
+
+
 
     # Register blue-printed routes
     from routes import register_routes
     register_routes(app)
+    
+    # Initialize admin user if it doesn't exist
+    with app.app_context():
+        try:
+            from app.models import User, Admin
+            from werkzeug.security import generate_password_hash
+            
+            admin_user = User.query.filter_by(username='admin').first()
+            if not admin_user:
+                admin = User(
+                    username='admin',
+                    email='admin@example.com',
+                    phone='+1234567890',
+                    role='admin',
+                    is_active=True
+                )
+                admin.password_hash = generate_password_hash('admin123')
+                
+                admin_legacy = Admin(
+                    username='admin',
+                    phone='+1234567890'
+                )
+                admin_legacy.password_hash = generate_password_hash('admin123')
+                
+                db.session.add(admin)
+                db.session.add(admin_legacy)
+                db.session.commit()
+        except Exception:
+            pass  # Ignore errors during startup
 
     # Service-worker endpoint (optional)
     @app.route("/service-worker.js")
@@ -113,6 +97,11 @@ def create_app():
         if os.path.exists(vite_svg_path):
             return send_from_directory(DIST_DIR, "vite.svg")
         return "", 404
+
+    # Handle favicon requests
+    @app.route("/favicon.ico")
+    def favicon():
+        return "", 204
 
     # Custom error handler for 404
     @app.errorhandler(404)
@@ -142,4 +131,4 @@ app = create_app()
 if __name__ == "__main__":
     # Use PORT from environment variables (Heroku sets this) or default to 5000.
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)

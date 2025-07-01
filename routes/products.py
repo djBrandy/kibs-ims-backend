@@ -8,12 +8,14 @@ import requests
 product_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
 @product_bp.route('/', methods=['GET'])
+@product_bp.route('', methods=['GET'])
 def get_all_products():
     try:
         category = request.args.get('category')
         product_type = request.args.get('product_type')
         low_stock = request.args.get('low_stock', type=bool)
         room_id = request.args.get('room_id', type=int)
+        detailed = request.args.get('detailed', 'false').lower() == 'true'
         
         query = Product.query
         
@@ -30,20 +32,51 @@ def get_all_products():
         
         result = []
         for product in products:
-            product_dict = {
-                "id": product.id,
-                "product_name": product.product_name,
-                "product_code": product.product_code,
-                "price_in_kshs": product.price_in_kshs,
-                "quantity": product.quantity,
-                "unit_of_measure": product.unit_of_measure,
-                "category": product.category,
-                "product_type": product.product_type,
-                "qr_code": product.qr_code,
-                "room_id": product.room_id,
-                "product_images": base64.b64encode(product.product_images).decode('utf-8') if product.product_images else None,
-                "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
-            }
+            if detailed:
+                # Return detailed product information
+                product_dict = {
+                    "id": product.id,
+                    "product_name": product.product_name,
+                    "product_code": product.product_code,
+                    "manufacturer": product.manufacturer,
+                    "price_in_kshs": product.price_in_kshs,
+                    "quantity": product.quantity,
+                    "unit_of_measure": product.unit_of_measure,
+                    "category": product.category,
+                    "product_type": product.product_type,
+                    "concentration": product.concentration,
+                    "storage_temperature": product.storage_temperature,
+                    "expiration_date": product.expiration_date.isoformat() if product.expiration_date else None,
+                    "hazard_level": product.hazard_level,
+                    "protocol_link": product.protocol_link,
+                    "msds_link": product.msds_link,
+                    "low_stock_alert": product.low_stock_alert,
+                    "checkbox_expiry_date": product.checkbox_expiry_date,
+                    "checkbox_hazardous_material": product.checkbox_hazardous_material,
+                    "checkbox_controlled_substance": product.checkbox_controlled_substance,
+                    "checkbox_requires_regular_calibration": product.checkbox_requires_regular_calibration,
+                    "special_instructions": product.special_instructions,
+                    "qr_code": product.qr_code,
+                    "room_id": product.room_id,
+                    "product_images": base64.b64encode(product.product_images).decode('utf-8') if product.product_images else None,
+                    "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
+                }
+            else:
+                # Return basic product information
+                product_dict = {
+                    "id": product.id,
+                    "product_name": product.product_name,
+                    "product_code": product.product_code,
+                    "price_in_kshs": product.price_in_kshs,
+                    "quantity": product.quantity,
+                    "unit_of_measure": product.unit_of_measure,
+                    "category": product.category,
+                    "product_type": product.product_type,
+                    "qr_code": product.qr_code,
+                    "room_id": product.room_id,
+                    "product_images": base64.b64encode(product.product_images).decode('utf-8') if product.product_images else None,
+                    "date_of_entry": product.date_of_entry.isoformat() if product.date_of_entry else None
+                }
             result.append(product_dict)
             
         return jsonify(result), 200
