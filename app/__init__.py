@@ -1,7 +1,7 @@
 import os
 import sys
 from flask import Flask, send_from_directory, request, render_template, make_response
-from flask_cors import CORS
+# CORS removed - using manual headers
 from flask_mail import Mail
 
 # Add current directory to Python path
@@ -42,8 +42,27 @@ def create_app():
     migrate.init_app(app, db)
     mail.init_app(app)
     
-    # Configure CORS to allow all origins
-    CORS(app, origins="*", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers="*")
+    # Disable CORS completely - allow all origins and methods
+    @app.after_request
+    def after_request(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = '*'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Expose-Headers'] = '*'
+        response.headers['Access-Control-Max-Age'] = '86400'
+        return response
+    
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            response = make_response()
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = '*'
+            response.headers['Access-Control-Allow-Headers'] = '*'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '86400'
+            return response
 
 
 
