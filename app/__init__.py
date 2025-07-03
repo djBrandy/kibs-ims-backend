@@ -4,6 +4,13 @@ from flask import Flask, send_from_directory, request, render_template, make_res
 # CORS removed - using manual headers
 from flask_mail import Mail
 
+# Completely disable Flask-CORS if it exists
+try:
+    import flask_cors
+    flask_cors.CORS = lambda *args, **kwargs: None
+except ImportError:
+    pass
+
 # Add current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,11 +36,12 @@ mail = Mail()
 def create_app():
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'dist'))
+    TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
     app = Flask(
         __name__,
         static_folder=DIST_DIR,
-        template_folder=DIST_DIR
+        template_folder=TEMPLATE_DIR
     )
     app.config.from_object(Config)
 
@@ -42,14 +50,18 @@ def create_app():
     migrate.init_app(app, db)
     mail.init_app(app)
     
-    # Disable CORS completely - allow all origins and methods
+    # Force CORS headers - allow dev tunnels
     @app.after_request
     def after_request(response):
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = '*'
+        origin = request.headers.get('Origin')
+        if origin and ('devtunnels.ms' in origin or 'localhost' in origin):
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
         response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Expose-Headers'] = '*'
         response.headers['Access-Control-Max-Age'] = '86400'
         return response
     
@@ -57,9 +69,14 @@ def create_app():
     def handle_preflight():
         if request.method == "OPTIONS":
             response = make_response()
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = '*'
-            response.headers['Access-Control-Allow-Headers'] = '*'
+            origin = request.headers.get('Origin')
+            if origin and ('devtunnels.ms' in origin or 'localhost' in origin):
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                response.headers['Access-Control-Allow-Origin'] = '*'
+                
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Max-Age'] = '86400'
             return response
@@ -121,6 +138,22 @@ def create_app():
     @app.route("/favicon.ico")
     def favicon():
         return "", 204
+    
+    # Handle src/assets requests
+    @app.route("/src/assets/<path:filename>")
+    def serve_assets(filename):
+        assets_path = os.path.join(DIST_DIR, "assets", filename)
+        if os.path.exists(assets_path):
+            return send_from_directory(os.path.join(DIST_DIR, "assets"), filename)
+        return "", 404
+    
+    # Handle manifest.json
+    @app.route("/manifest.json")
+    def manifest():
+        manifest_path = os.path.join(DIST_DIR, "manifest.json")
+        if os.path.exists(manifest_path):
+            return send_from_directory(DIST_DIR, "manifest.json")
+        return "", 404
 
     # Custom error handler for 404
     @app.errorhandler(404)
