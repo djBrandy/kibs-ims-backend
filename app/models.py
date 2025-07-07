@@ -82,6 +82,9 @@ class Product(db.Model):
     product_images = db.Column(db.LargeBinary, nullable=True)
     date_of_entry = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     hidden_from_workers = db.Column(db.Boolean, default=False)
+    last_audit_time = db.Column(db.DateTime, nullable=True)  # Track last audit time
+    audit_message = db.Column(db.Text, nullable=True)  # Brief message from auditor
+    force_low_stock_alert = db.Column(db.Boolean, default=False)  # Override for low stock alerts
     
     # Add room relationship
     room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=True)
@@ -89,6 +92,8 @@ class Product(db.Model):
     purchases = db.relationship('Purchase', backref='product', lazy=True)
     
     def to_dict(self, include_qr=True):
+        import base64
+        
         data = {
             'id': self.id,
             'product_name': self.product_name,
@@ -112,9 +117,20 @@ class Product(db.Model):
             'checkbox_requires_regular_calibration': self.checkbox_requires_regular_calibration,
             'special_instructions': self.special_instructions,
             'date_of_entry': self.date_of_entry.isoformat() if self.date_of_entry else None,
+            'last_audit_time': self.last_audit_time.isoformat() if self.last_audit_time else None,
             'room_id': self.room_id,
             'room_name': self.room.name if self.room else None
         }
+        
+        # Handle product images
+        if self.product_images:
+            try:
+                data['product_images'] = base64.b64encode(self.product_images).decode('utf-8')
+            except Exception as e:
+                print(f"Error encoding image: {e}")
+                data['product_images'] = None
+        else:
+            data['product_images'] = None
         
         # Add hidden_from_workers if it exists
         try:
@@ -126,6 +142,13 @@ class Product(db.Model):
         # Only include QR code for admin users
         if include_qr:
             data['qr_code'] = self.qr_code
+        
+        # Check if product can be edited (24-hour rule)
+        if self.last_audit_time:
+            time_since_audit = datetime.utcnow() - self.last_audit_time
+            data['can_edit'] = time_since_audit.total_seconds() > 86400  # 24 hours
+        else:
+            data['can_edit'] = True
             
         return data
 
@@ -207,11 +230,11 @@ class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     user_id = db.Column(db.Integer, nullable=True) 
-    action_type = db.Column(db.String(50), nullable=False)  
-    previous_value = db.Column(db.String(255), nullable=True)
-    new_value = db.Column(db.String(255), nullable=True)
+    action_type = db.Column(db.String(100), nullable=False)
+    previous_value = db.Column(db.Text, nullable=True)
+    new_value = db.Column(db.Text, nullable=True)
     notes = db.Column(db.Text, nullable=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = db.Column(db.DateTime, default=func.now(), nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=True)
     
     product = db.relationship('Product', backref='audit_logs', lazy=True)
@@ -222,6 +245,7 @@ class AuditLog(db.Model):
             'id': self.id,
             'product_id': self.product_id,
             'product_name': self.product.product_name if self.product else None,
+            'user_id': self.user_id,
             'action_type': self.action_type,
             'previous_value': self.previous_value,
             'new_value': self.new_value,
@@ -229,6 +253,37 @@ class AuditLog(db.Model):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'room_id': self.room_id,
             'room_name': self.room.name if self.room else None
+        }
+
+
+class Suggestion(db.Model):
+    __tablename__ = 'suggestions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(100), nullable=True)
+    priority = db.Column(db.String(20), default='medium', nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)
+    submitted_by = db.Column(db.Integer, nullable=True)
+    reviewed_by = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=func.now(), nullable=False)
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+    admin_notes = db.Column(db.Text, nullable=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'category': self.category,
+            'priority': self.priority,
+            'status': self.status,
+            'submitted_by': self.submitted_by,
+            'reviewed_by': self.reviewed_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'admin_notes': self.admin_notes
         }
 
 
@@ -325,6 +380,65 @@ class InventoryAnalytics(db.Model):
             'is_slow_moving': self.is_slow_moving,
             'is_top_product': self.is_top_product,
             'movement_rank': self.movement_rank,
+            'revenue_rank': self.revenue_rank,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None
+        }lf.movement_rank,
+            'revenue_rank': self.revenue_rank,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None
+        }
+
+
+class Routine(db.Model):
+    __tablename__ = 'routines'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    scheduled_time = db.Column(db.Time, nullable=False)  # Time of day (e.g., 08:00)
+    frequency = db.Column(db.String(20), default='daily', nullable=False)  # daily, weekly, monthly
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_by = db.Column(db.Integer, nullable=True)  # User ID
+    created_at = db.Column(db.DateTime, default=func.now(), nullable=False)
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationship with completions
+    completions = db.relationship('RoutineCompletion', backref='routine', lazy=True, cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'scheduled_time': self.scheduled_time.strftime('%H:%M') if self.scheduled_time else None,
+            'frequency': self.frequency,
+            'is_active': self.is_active,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class RoutineCompletion(db.Model):
+    __tablename__ = 'routine_completions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    routine_id = db.Column(db.Integer, db.ForeignKey('routines.id'), nullable=False)
+    completion_date = db.Column(db.Date, nullable=False)  # Date when routine was due
+    completed_at = db.Column(db.DateTime, nullable=True)  # When it was actually completed
+    completed_by = db.Column(db.Integer, nullable=True)  # User ID who completed it
+    is_completed = db.Column(db.Boolean, default=False, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'routine_id': self.routine_id,
+            'completion_date': self.completion_date.isoformat() if self.completion_date else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'completed_by': self.completed_by,
+            'is_completed': self.is_completed,
+            'notes': self.notes
+        }lf.movement_rank,
             'revenue_rank': self.revenue_rank,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'room_id': self.product.room_id if self.product else None,

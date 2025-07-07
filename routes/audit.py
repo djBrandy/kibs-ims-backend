@@ -34,6 +34,13 @@ def scan_product(barcode):
             return jsonify({'error': 'Product not found'}), 404
             
         print(f"Product found: {product.product_name}")
+        
+        # Check if product can be edited (24-hour rule)
+        can_edit = True
+        if product.last_audit_time:
+            time_since_audit = datetime.utcnow() - product.last_audit_time
+            can_edit = time_since_audit.total_seconds() > 86400  # 24 hours
+        
         return jsonify({
             'id': product.id,
             'product_name': product.product_name,
@@ -42,7 +49,9 @@ def scan_product(barcode):
             'unit_of_measure': product.unit_of_measure,
             'concentration': product.concentration,
             'special_instructions': product.special_instructions,
-            'product_type': product.product_type  # Add product_type to the response
+            'product_type': product.product_type,
+            'can_edit': can_edit,
+            'last_audit_time': product.last_audit_time.isoformat() if product.last_audit_time else None
         }), 200
         
     except Exception as e:
@@ -64,8 +73,20 @@ def update_product(product_id):
         previous_concentration = product.concentration
         previous_instructions = product.special_instructions
         
+        # Update last audit time
+        product.last_audit_time = datetime.utcnow()
+        
         # Define special product types that require special auditing
         special_audit_types = ['Equipment', 'Reference Material', 'Protective Equipment', 'Data Storage Devices', 'Lab Furniture']
+        
+        # Helper function to truncate long values for database
+        def truncate_value(value, max_length=1000):
+            if value is None:
+                return None
+            str_value = str(value)
+            if len(str_value) > max_length:
+                return str_value[:max_length] + '... (truncated)'
+            return str_value
         
         if 'quantity' in data:
             # For Equipment, focus on working status instead of quantity
@@ -77,9 +98,9 @@ def update_product(product_id):
                     product_id=product.id,
                     user_id=session.get('user_id'),
                     action_type='equipment_status_update',
-                    previous_value=previous_instructions or 'Unknown',
-                    new_value=working_status,
-                    notes=f"Equipment status: {'working' if 'working' in working_status.lower() else 'not working' if is_not_working else working_status}"
+                    previous_value=truncate_value(previous_instructions or 'Unknown'),
+                    new_value=truncate_value(working_status),
+                    notes=truncate_value(f"Equipment status: {'working' if 'working' in working_status.lower() else 'not working' if is_not_working else working_status}")
                 )
                 db.session.add(audit_log)
                 product.special_instructions = working_status
@@ -106,9 +127,9 @@ def update_product(product_id):
                             product_id=product.id,
                             user_id=session.get('user_id'),
                             action_type=f"{product.product_type.lower().replace(' ', '_')}_update",
-                            previous_value=str(previous_quantity),
-                            new_value=str(new_quantity),
-                            notes=data.get('notes', f'{product.product_type} updated')
+                            previous_value=truncate_value(str(previous_quantity)),
+                            new_value=truncate_value(str(new_quantity)),
+                            notes=truncate_value(data.get('notes', f'{product.product_type} updated'))
                         )
                         db.session.add(audit_log)
                         product.quantity = new_quantity
@@ -124,9 +145,9 @@ def update_product(product_id):
                             product_id=product.id,
                             user_id=session.get('user_id'),
                             action_type='quantity_update',
-                            previous_value=str(previous_quantity),
-                            new_value=str(new_quantity),
-                            notes=data.get('notes', 'Quantity updated')
+                            previous_value=truncate_value(str(previous_quantity)),
+                            new_value=truncate_value(str(new_quantity)),
+                            notes=truncate_value(data.get('notes', 'Quantity updated'))
                         )
                         db.session.add(audit_log)
                         product.quantity = new_quantity
@@ -142,9 +163,9 @@ def update_product(product_id):
                             product_id=product.id,
                             user_id=session.get('user_id'),
                             action_type='concentration_update',
-                            previous_value=str(previous_concentration) if previous_concentration is not None else 'None',
-                            new_value=str(new_concentration),
-                            notes=data.get('notes', 'Concentration updated')
+                            previous_value=truncate_value(str(previous_concentration) if previous_concentration is not None else 'None'),
+                            new_value=truncate_value(str(new_concentration)),
+                            notes=truncate_value(data.get('notes', 'Concentration updated'))
                         )
                         db.session.add(audit_log)
                         product.concentration = new_concentration
@@ -169,13 +190,33 @@ def update_product(product_id):
                 product_id=product.id,
                 user_id=session.get('user_id'),
                 action_type='notes_update',
-                previous_value=previous_instructions if previous_instructions else 'None',
-                new_value=data['special_instructions'] if data['special_instructions'] else 'None',
-                notes=data.get('notes', 'Special instructions updated')
+                previous_value=truncate_value(previous_instructions if previous_instructions else 'None'),
+                new_value=truncate_value(data['special_instructions'] if data['special_instructions'] else 'None'),
+                notes=truncate_value(data.get('notes', 'Special instructions updated'))
             )
             db.session.add(audit_log)
             product.special_instructions = data['special_instructions']
             print(f"Updated special instructions from '{previous_instructions}' to '{data['special_instructions']}'")
+        
+        # Handle audit message
+        if 'audit_message' in data:
+            product.audit_message = data['audit_message']
+            print(f"Updated audit message: {data['audit_message']}")
+        
+        # Handle force low stock alert
+        if 'force_low_stock_alert' in data:
+            product.force_low_stock_alert = bool(data['force_low_stock_alert'])
+            print(f"Force low stock alert: {product.force_low_stock_alert}")
+        
+        # Handle audit message
+        if 'audit_message' in data:
+            product.audit_message = data['audit_message']
+            print(f"Updated audit message: {data['audit_message']}")
+        
+        # Handle force low stock alert
+        if 'force_low_stock_alert' in data:
+            product.force_low_stock_alert = bool(data['force_low_stock_alert'])
+            print(f"Force low stock alert: {product.force_low_stock_alert}")
         
         db.session.commit()
         
@@ -186,8 +227,11 @@ def update_product(product_id):
                 'product_name': product.product_name,
                 'quantity': product.quantity,
                 'concentration': product.concentration,
-                'special_instructions': product.special_instructions
-            }
+                'special_instructions': product.special_instructions,
+                'audit_message': product.audit_message,
+                'force_low_stock_alert': product.force_low_stock_alert
+            },
+            'show_instructions': product.special_instructions is not None and product.special_instructions.strip() != ''
         }), 200
         
     except Exception as e:
