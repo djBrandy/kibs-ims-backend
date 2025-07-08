@@ -118,6 +118,8 @@ class Product(db.Model):
             'special_instructions': self.special_instructions,
             'date_of_entry': self.date_of_entry.isoformat() if self.date_of_entry else None,
             'last_audit_time': self.last_audit_time.isoformat() if self.last_audit_time else None,
+            'audit_message': self.audit_message,
+            'force_low_stock_alert': self.force_low_stock_alert,
             'room_id': self.room_id,
             'room_name': self.room.name if self.room else None
         }
@@ -382,9 +384,6 @@ class InventoryAnalytics(db.Model):
             'movement_rank': self.movement_rank,
             'revenue_rank': self.revenue_rank,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None
-        }lf.movement_rank,
-            'revenue_rank': self.revenue_rank,
-            'last_updated': self.last_updated.isoformat() if self.last_updated else None
         }
 
 
@@ -394,14 +393,13 @@ class Routine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    scheduled_time = db.Column(db.Time, nullable=False)  # Time of day (e.g., 08:00)
-    frequency = db.Column(db.String(20), default='daily', nullable=False)  # daily, weekly, monthly
+    scheduled_time = db.Column(db.Time, nullable=False)
+    frequency = db.Column(db.String(20), default='daily', nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_by = db.Column(db.Integer, nullable=True)  # User ID
+    created_by = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=func.now(), nullable=False)
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
     
-    # Relationship with completions
     completions = db.relationship('RoutineCompletion', backref='routine', lazy=True, cascade='all, delete-orphan')
     
     def to_dict(self):
@@ -423,9 +421,9 @@ class RoutineCompletion(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     routine_id = db.Column(db.Integer, db.ForeignKey('routines.id'), nullable=False)
-    completion_date = db.Column(db.Date, nullable=False)  # Date when routine was due
-    completed_at = db.Column(db.DateTime, nullable=True)  # When it was actually completed
-    completed_by = db.Column(db.Integer, nullable=True)  # User ID who completed it
+    completion_date = db.Column(db.Date, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    completed_by = db.Column(db.Integer, nullable=True)
     is_completed = db.Column(db.Boolean, default=False, nullable=False)
     notes = db.Column(db.Text, nullable=True)
     
@@ -438,53 +436,7 @@ class RoutineCompletion(db.Model):
             'completed_by': self.completed_by,
             'is_completed': self.is_completed,
             'notes': self.notes
-        }lf.movement_rank,
-            'revenue_rank': self.revenue_rank,
-            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
-            'room_id': self.product.room_id if self.product else None,
-            'room_name': self.product.room.name if self.product and self.product.room else None
         }
-
-
-class Category(db.Model):
-    __tablename__ = 'categories'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    
-    products = db.relationship('Product', 
-                              primaryjoin="Category.name==Product.category",
-                              backref='category_rel', 
-                              lazy=True,
-                              foreign_keys=[Product.category])
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name
-        }
-
-
-class Order(db.Model):
-    __tablename__ = 'orders'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    customer_name = db.Column(db.String(255), nullable=False)
-    customer_email = db.Column(db.String(255), nullable=False)
-    order_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    status = db.Column(db.String(50), default='pending', nullable=False)
-
-    items = db.relationship('OrderItem', backref='order', lazy=True)
-
-
-class OrderItem(db.Model):
-    __tablename__ = 'order_items'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=True)
 
 
 class Admin(db.Model):
