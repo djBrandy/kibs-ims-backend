@@ -4,7 +4,7 @@
 - PythonAnywhere account with MySQL database
 - Database: `djbrandy67$kibs_ims_db`
 - Database user: `djbrandy67`
-- Database password: set via environment variable () — never hardcode in this file or in source. Rotate immediately if this file ever contained a real password.`Brandon`
+- Database password: set via the `DB_PASSWORD` environment variable — never hardcode it here or in source. This file previously contained a real plaintext password; rotate it on PythonAnywhere immediately if that has not already been done.
 
 ## Step 1: Upload Files
 Upload all backend files to `/home/djbrandy67/kibs-ims-backend/`
