@@ -1,22 +1,15 @@
-# kibs-ims-backend
-A useful project
+# KIBS IMS — Backend
 
-## Table of Contents
-1. [Installation](#installation)
-2. [Usage](#usage)
-3. [License](#license)
+Backend service for KIBS, an inventory management system, built with Flask and deployed on PythonAnywhere.
 
-## Installation
-To install the project, follow these steps:
-* Clone the repository using `git clone https://github.com/your-username/kibs-ims-backend.git`
-* Install the dependencies using `npm install` or `yarn install`
-* Configure the environment variables as needed
+## Features
+- REST API for inventory records
+- JWT-based authentication middleware
+- MySQL-backed persistence, with schema migration scripts
+- Deployment tooling for PythonAnywhere (WSGI configuration, dependency management)
 
-## Usage
-To use the project, follow these steps:
-* Start the development server using `npm start` or `yarn start`
-* Access the API endpoints as described in the project documentation
-* Use the project as intended, referring to the documentation for any specific instructions
+## Status: in progress
+Core CRUD and authentication are functional and deployed. Ongoing work: consolidating the deployment scripts/packages accumulated during setup, and moving deployment credentials out of tracked files entirely (in progress as of this update).
 
-## License
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+## Stack
+Python, Flask, MySQL, JWT
